@@ -1,5 +1,20 @@
 # 更新日志
 
+## [2026-08-25]
+
+### 修复
+
+- **修复全量编译失败（sing-box 1.14.0-rc.1 connPool linkname 未定义）**：最新 `MTK-AUTO` / `OWRT-ALL` 自动编译（Run #32779089109 / #32779089097）在 `Compile Firmware` 阶段因 `sing-box` 包构建失败，报错 `undefined reference to golang.org/x/net/http2.(*Transport).connPool`，`collect2: error: ld returned 1 exit status`，`ERROR: package/packages/sing-box failed to build (build variant: full)`。所有机型（`H5000M-qmodem*` / `AP3000M-qmodem*` / `X86-qmodem*`）均受影响。
+  - **根因**：`sing-box 1.14.0-rc.1` 的 `transport/v2rayhttp/force_close.go` 通过 `//go:linkname transportConnPool golang.org/x/net/http2.(*Transport).connPool` 访问 `http2.Transport` 的**内部未导出方法** `connPool`，用于在 `Client.Close()` 时强制关闭所有 HTTP/2 连接。但 `golang.org/x/net` 在 v0.58.0+ 版本中移除/重命名了该内部方法，Go 模块解析时拉取到新版 x/net 后，链接阶段找不到该符号。08-23 同配置仍成功，属上游依赖漂移。
+  - **修复**：在 `Scripts/Handles.sh` 末尾新增 sing-box 兼容修复段，构建时自动定位 `sing-box/transport/v2rayhttp/force_close.go` 并通过 Python 脚本：
+    1. 移除 `//go:linkname transportConnPool` 声明与 `func transportConnPool()` 函数定义；
+    2. 将 `case *http2.Transport:` 分支由"通过内部 API 遍历关闭所有连接"改为直接 `return transport`（`http2.Transport` 无公开的 `CloseIdleConnections` 方法，未关闭的连接由 Go GC 回收，不影响功能）。
+  - 保留 `clientConnPool` / `efaceWords` 结构体定义以避免 `unsafe` / `sync` 未使用导入报错。本地 `gofmt -e` 语法校验通过。
+
+### 变更文件
+
+- `Scripts/Handles.sh` — 新增 sing-box force_close.go connPool linkname 兼容修复段
+
 ## [2026-08-18]
 
 ### 修复
