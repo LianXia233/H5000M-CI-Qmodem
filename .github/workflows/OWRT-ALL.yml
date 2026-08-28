@@ -36,8 +36,8 @@ jobs:
       #max-parallel: 3
       matrix:
         CONFIG: [X86-qmodem-next, X86-qmodem]
-        SOURCE: [immortalwrt/immortalwrt]
-        BRANCH: [master]
+        SOURCE: [VIKINGYFY/immortalwrt]
+        BRANCH: [main]
     #调用公用编译核心WRT-CORE.yml
     uses: ./.github/workflows/WRT-CORE.yml
     with:
