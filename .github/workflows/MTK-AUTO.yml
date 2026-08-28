@@ -28,17 +28,17 @@ jobs:
       matrix:
         include:
           - CONFIG: H5000M-qmodem-next
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: main
           - CONFIG: H5000M-qmodem
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: main
           - CONFIG: AP3000M-qmodem-next
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: main
           - CONFIG: AP3000M-qmodem
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: main
           
 
     uses: ./.github/workflows/WRT-CORE.yml
