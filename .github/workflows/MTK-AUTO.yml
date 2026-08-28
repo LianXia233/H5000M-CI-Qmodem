@@ -29,16 +29,16 @@ jobs:
         include:
           - CONFIG: H5000M-qmodem-next
             SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: main
+            BRANCH: owrt
           - CONFIG: H5000M-qmodem
             SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: main
+            BRANCH: owrt
           - CONFIG: AP3000M-qmodem-next
             SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: main
+            BRANCH: owrt
           - CONFIG: AP3000M-qmodem
             SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: main
+            BRANCH: owrt
           
 
     uses: ./.github/workflows/WRT-CORE.yml
