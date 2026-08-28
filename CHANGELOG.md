@@ -1,5 +1,16 @@
 # 更新日志
 
+## [2026-08-29]
+
+### 变更
+
+- **源码切换：H5000M / AP3000M 改为 VIKINGYFY/immortalwrt `owrt` 分支**：`MTK-AUTO` 工作流对应配置（H5000M / AP3000M）由原源码切换至 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支；`X86` 配置保持 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 主线 `master` 分支不变。已推送至远端 `main`（HEAD `87ef5b4`）。
+
+### 文档同步
+
+- `README.md` — 支持配置表新增「编译源码」列并补 X86 行；快速开始、固件底包、源码上游鸣谢补充双源码分支说明；在线升级标签示例更新为 `H5000M-qmodem-next-VIKINGYFY-owrt-...` / `X86-qmodem-next-immortalwrt-master-...`；文档更新日期改为 2026-08-29
+- `index.html` — 「技术规格」卡片改为「双源码构建」，注明 H5000M / AP3000M 基于 VIKINGYFY owrt 分支、x86 基于主线 master
+
 ## [2026-08-25]
 
 ### 新增

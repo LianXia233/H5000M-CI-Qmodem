@@ -2,7 +2,7 @@
 
 # 🚀 H5000M & AP3000M & x86 · ImmortalWrt 定制固件说明书
 
-*基于 ImmortalWrt 主线源码，覆盖 Hiveton H5000M、AirPi AP3000M 与 x86 平台的定制化编译配置与模组解析*
+*基于 ImmortalWrt 生态源码（H5000M / AP3000M 使用 VIKINGYFY `owrt` 分支、x86 使用主线 `master` 分支），覆盖 Hiveton H5000M、AirPi AP3000M 与 x86 平台的定制化编译配置与模组解析*
 
 </div>
 
@@ -10,7 +10,7 @@
 
 ## 🚀 快速开始
 
-本仓库通过 GitHub Actions 自动编译 H5000M、AP3000M 与 x86 平台的 ImmortalWrt 固件，无需本地搭建编译环境。
+本仓库通过 GitHub Actions 自动编译 H5000M、AP3000M 与 x86 平台的 ImmortalWrt 固件，无需本地搭建编译环境。**H5000M / AP3000M** 基于 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支编译，**x86** 基于 [ImmortalWrt 主线](https://github.com/immortalwrt/immortalwrt) 的 `master` 分支编译。
 
 | 入口工作流 | 触发方式 | 用途 |
 | :--- | :--- | :--- |
@@ -61,12 +61,13 @@ OpenWRT-CI-H5000M/
 
 本仓库提供以下设备编译配置：
 
-| 配置 | 平台 | 设备 | Wi-Fi |
-| :--- | :--- | :--- | :--- |
-| `H5000M` | MediaTek Filogic | Hiveton H5000M（鼎桥 MT5700M 5G CPE） | ✅ 开启 |
-| `AP3000M` | MediaTek Filogic / MT7981 | AirPi AP3000M | ✅ 开启（开源 mt76） |
+| 配置 | 平台 | 设备 | Wi-Fi | 编译源码 |
+| :--- | :--- | :--- | :--- | :--- |
+| `H5000M` | MediaTek Filogic | Hiveton H5000M（鼎桥 MT5700M 5G CPE） | ✅ 开启 | VIKINGYFY/immortalwrt `owrt` |
+| `AP3000M` | MediaTek Filogic / MT7981 | AirPi AP3000M | ✅ 开启（开源 mt76） | VIKINGYFY/immortalwrt `owrt` |
+| `X86` | x86 / 64 | 通用 x86 平台 | — | immortalwrt/immortalwrt `master` |
 
-`AP3000M` 基于 ImmortalWrt 主线源码编译，使用开源 `mt76` Wi-Fi 驱动栈，无需额外闭源驱动。EEPROM 通过 `Handles.sh` 在构建时自动注入，首次启动时由 `AP3000M-EEPROM/99-ap3000m-eeprom` 写入 `factory` 分区，修正 radio1 为 5G 模式。手动运行 `WRT-BUILD` 时直接选择 ImmortalWrt 主线源码即可。
+`AP3000M` 基于 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支编译，使用开源 `mt76` Wi-Fi 驱动栈，无需额外闭源驱动。EEPROM 通过 `Handles.sh` 在构建时自动注入，首次启动时由 `AP3000M-EEPROM/99-ap3000m-eeprom` 写入 `factory` 分区，修正 radio1 为 5G 模式。手动运行 `WRT-BUILD` 时选择 `VIKINGYFY/immortalwrt` + 分支 `owrt` 即可。
 
 <br>
 
@@ -78,6 +79,8 @@ OpenWRT-CI-H5000M/
 > 
 > 感谢 ImmortalWrt 团队提供的最新主线源码。其卓越的路由性能和丰富的本地化特性，为固件的开发提供了无比坚实的底层源码基础。
 > * 🔗 **项目链接**：[immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt/)
+> 
+> 本项目 **x86** 固件基于 ImmortalWrt 主线 `master` 分支编译；**H5000M / AP3000M** 基于 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支编译（详见下方 VIKINGYFY 部分）。
 
 > **👤 基础底包、插件优化与编译框架：[VIKINGYFY](https://github.com/VIKINGYFY)**
 > 
@@ -110,7 +113,7 @@ OpenWRT-CI-H5000M/
 
 | 核心特征 | 详情描述 |
 | :--- | :--- |
-| 🏗️ **固件底包** | **基于 ImmortalWrt 主线最新源码构建**。内核层面已开启硬件加解密优化（`kmod-cryptodev`, `kmod-tls`），为科学分流和安全组网提供底层加速。 |
+| 🏗️ **固件底包** | **基于 VIKINGYFY/immortalwrt `owrt` 分支（ImmortalWrt 生态）构建**。内核层面已开启硬件加解密优化（`kmod-cryptodev`, `kmod-tls`），为科学分流和安全组网提供底层加速。 |
 | 🖥️ **基础架构** | 采用 **联发科 (MediaTek) Filogic** 平台 (如 MT7986 系列)，具备强大的网络数据转发能力与 Wi-Fi 7 性能。 |
 | 📶 **核心模组** | 深度集成 **MT5700M 5G 模组**，支持直接插卡上网，实现 5G 高速蜂窝接入。 |
 | ❄️ **散热设计** | 针对 5G 模组高负载下的发热特性，设备配备了**主动散热风扇**，专为高负载网络转化设计，确保极限性能下不降频。 |
@@ -157,7 +160,7 @@ OpenWRT-CI-H5000M/
 基于 [gooyjq/luci-app-online-upgrade](https://github.com/gooyjq/luci-app-online-upgrade) 定制，**所有机型默认启用**，入口在 LuCI **系统 → 在线升级**。
 
 - **🔍 按机型自动匹配**：固件在构建时会把本机身份（机型 + QModem 前端类型 + 构建标签）烙入 `/etc/online-upgrade-device`。插件运行时据此动态解析本仓库对应配置的最新 Release，自动挑选出匹配当前设备的固件包，**不会下错型号/前端**。
-- **🏷️ 精准区分**：Release 标签格式为 `{配置名}-{源码owner}-{分支}-{日期}`（如 `H5000M-qmodem-next-immortalwrt-master-26.08.10-...`）。传统 `H5000M-qmodem` 与 `H5000M-qmodem-next` 通过 `-{源码owner}-` 锚点严格区分，互不错配。
+- **🏷️ 精准区分**：Release 标签格式为 `{配置名}-{源码owner}-{分支}-{日期}`（H5000M / AP3000M 如 `H5000M-qmodem-next-VIKINGYFY-owrt-26.08.29-...`，x86 如 `X86-qmodem-next-immortalwrt-master-26.08.29-...`）。传统 `H5000M-qmodem` 与 `H5000M-qmodem-next` 通过 `-{源码owner}-` 锚点严格区分，互不错配。
 - **✅ 已是最新判断**：以本机固件对应的构建标签与最新 Release 标签比对，一致即提示已是最新；有新构建才提示升级。
 - **💾 保留配置升级**：一键升级默认保留系统配置（`keep_config`），升级前自动备份、升级后自动恢复；并内置 GitHub 下载加速代理（`gh.acg2.mom`）。
 
@@ -176,5 +179,5 @@ OpenWRT-CI-H5000M/
 
 <br>
 
-> 📅 *文档更新日期：2026年8月9日*
+> 📅 *文档更新日期：2026年8月29日*
 > 💡 *本说明文档由项目编译配置与社区开源信息整合生成。*
