@@ -282,7 +282,8 @@ jobs:
         run: |
           cd ./wrt/
 
-          PKG_DIR="package/luci-app-airpi-fancontrol"
+          # 用绝对路径：下面的子 shell 会 cd 进 $PKG_DIR/src，相对路径会失效
+          PKG_DIR="$(pwd)/package/luci-app-airpi-fancontrol"
           PREBUILT_DIR="$(pwd)/airpi-prebuilt"
 
           if [ ! -f "$PKG_DIR/src/Cargo.toml" ]; then
@@ -290,6 +291,8 @@ jobs:
             exit 0
           fi
 
+          # 整段放在受保护子 shell 内：任何一步失败都进入 else 回退，
+          # 不会让整个步骤失败（GitHub Actions 的 run 默认遇错即停）
           if (
             set -euxo pipefail
 
@@ -315,12 +318,18 @@ jobs:
 
             mkdir -p "$PREBUILT_DIR"
             cp -f target/aarch64-unknown-linux-musl/release/airpi-fanctl "$PREBUILT_DIR/airpi-fanctl"
-          ); then
-            # 让包走预编译分支，跳过 rust/host 源码构建
+
+            # 让包走预编译分支，跳过 rust/host 源码构建。
+            # 必须留在受保护子 shell 内：注入失败时（例如上游 Makefile 改了版式、
+            # 锚点 include $(TOPDIR)/rules.mk 找不到）脚本返回非零，会由外层 if
+            # 接管进入回退分支，而不是让整个步骤失败
             python3 "$GITHUB_WORKSPACE/Scripts/inject_airpi_prebuilt.py" "$PKG_DIR/Makefile"
+          ); then
             echo "airpi-fanctl 预编译完成，本次将跳过 rust/host 构建"
           else
-            echo "::warning::airpi-fanctl 预编译失败，回退到源码构建 rust/host（本次将额外增加约 1.5~3 小时）"
+            echo "::warning::airpi-fanctl 预编译失败，回退到源码构建 rust/host（本次编译将额外增加约 1.5~3 小时）"
+            # 清掉半成品：包 Makefile 未带 AIRPI_PREBUILT 标记时仍会走源码构建，
+            # 留着二进制只会占空间并造成状态不一致
             rm -rf "$PREBUILT_DIR"
           fi
 
