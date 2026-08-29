@@ -270,6 +270,60 @@ jobs:
 
           make download -j$(nproc)
 
+      - name: Prebuild AirPi Rust Binary (AP3000M)
+        # 仅 AP3000M 需要。luci-app-airpi-fancontrol 的守护进程 airpi-fanctl 由 Rust 编写，
+        # 默认路径会让 OpenWrt 从源码构建一整套 rust/host（rustc + cargo + LLVM），约 1.5~3 小时，
+        # 这正是 AP3000M 比同为 filogic 的 H5000M 恒定慢约 2 小时的原因。
+        # 这里照搬上游 LianXia233/luci-app-airpi3000m-fancontrol 的 CI 做法：
+        # 用 runner 自带的 rustup 配合源码树里已构建好的 aarch64 musl 交叉链接器直接 cargo
+        # 交叉编译，再通过 AIRPI_PREBUILT=1 / AIRPI_PREBUILT_BIN 交给包 Makefile，
+        # 从而完全跳过 rust/host 的源码构建。预编译失败会自动回退，不影响固件产出。
+        if: contains(env.WRT_CONFIG, 'AP3000M') && env.WRT_TEST != 'true'
+        run: |
+          cd ./wrt/
+
+          PKG_DIR="package/luci-app-airpi-fancontrol"
+          PREBUILT_DIR="$(pwd)/airpi-prebuilt"
+
+          if [ ! -f "$PKG_DIR/src/Cargo.toml" ]; then
+            echo "::warning::未找到 $PKG_DIR/src/Cargo.toml，跳过预编译（将由源码构建 rust/host）"
+            exit 0
+          fi
+
+          if (
+            set -euxo pipefail
+
+            # 确保目标交叉链接器就绪：命中缓存时秒过，冷编译才会真正构建工具链
+            make toolchain/install -j$(nproc)
+
+            LINKER="$(find ./staging_dir -type f -name 'aarch64-*linux-musl-gcc' -perm -111 | head -1)"
+            [ -n "$LINKER" ] || { echo "未找到 aarch64 musl 交叉链接器"; exit 1; }
+
+            # runner 镜像通常自带 rustup，缺失时最小化安装
+            if ! command -v rustup >/dev/null 2>&1; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+                | sh -s -- -y --profile minimal --default-toolchain stable
+            fi
+            export PATH="$HOME/.cargo/bin:$PATH"
+            rustup target add aarch64-unknown-linux-musl
+
+            # 用环境变量指定 linker，避免覆盖 runner 已有的 ~/.cargo/config.toml
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="$LINKER"
+
+            cd "$PKG_DIR/src"
+            cargo build --locked --release --target aarch64-unknown-linux-musl
+
+            mkdir -p "$PREBUILT_DIR"
+            cp -f target/aarch64-unknown-linux-musl/release/airpi-fanctl "$PREBUILT_DIR/airpi-fanctl"
+          ); then
+            # 让包走预编译分支，跳过 rust/host 源码构建
+            python3 "$GITHUB_WORKSPACE/Scripts/inject_airpi_prebuilt.py" "$PKG_DIR/Makefile"
+            echo "airpi-fanctl 预编译完成，本次将跳过 rust/host 构建"
+          else
+            echo "::warning::airpi-fanctl 预编译失败，回退到源码构建 rust/host（本次将额外增加约 1.5~3 小时）"
+            rm -rf "$PREBUILT_DIR"
+          fi
+
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
         run: |
