@@ -24,6 +24,6 @@ CONFIG_PACKAGE_luci-mod-network=y
 # AP3000M 专用硬件 (风扇控制)
 CONFIG_PACKAGE_luci-app-airpi-fancontrol=y
 CONFIG_PACKAGE_kmod-airpi-gpio-fan=y
-CONFIG_PACKAGE_luci-compat=y
-CONFIG_PACKAGE_luci-lua-runtime=y
+# luci-compat / luci-lua-runtime 已移除：风扇插件 v4.0 起为纯 JS 实现（仅依赖 luci-base），
+# 这两个遗留 Lua 兼容层无人使用，在新版 immortalwrt 中也不存在，保留只会额外编译一整套 Lua 依赖
 CONFIG_PACKAGE_kmod-hwmon-pwmfan=y

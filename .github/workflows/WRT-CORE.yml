@@ -63,6 +63,9 @@ jobs:
   core:
     name: ${{inputs.WRT_SOURCE}}
     runs-on: ubuntu-latest
+    # 略低于平台 6h 硬上限：触发硬上限会直接杀掉 runner，
+    # 缓存的 post 保存步骤会被整段跳过（见 AP3000M-qmodem 被取消的那次运行）
+    timeout-minutes: 345
     steps:
       - name: Checkout Projects
         uses: actions/checkout@v4
@@ -178,6 +181,9 @@ jobs:
         if: env.WRT_TEST != 'true'
         uses: actions/cache@v4
         with:
+          # 编译失败或超时也要保存：工具链（含最耗时的 rust/host）在头 1~2 小时就编好了，
+          # 不保存的话下次依旧从头冷编译，会陷入「超时→无缓存→再超时」的死循环
+          save-always: true
           # 关键改动：缓存键只绑定「目标平台 + 源码 + 分支」，不再绑定 commit hash。
           # 上游一有新提交也能通过 restore-keys 回退命中上次编译好的工具链。
           key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
@@ -192,6 +198,9 @@ jobs:
         if: env.WRT_TEST != 'true'
         uses: actions/cache@v4
         with:
+          # 编译失败或超时也要保存：工具链（含最耗时的 rust/host）在头 1~2 小时就编好了，
+          # 不保存的话下次依旧从头冷编译，会陷入「超时→无缓存→再超时」的死循环
+          save-always: true
           # 下载的源码包与机型无关，按「源码 + 分支」单独缓存，避免多机型各存一份
           key: wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
           restore-keys: |
@@ -272,7 +281,9 @@ jobs:
           export CCACHE_COMPRESS=true
           ccache -z 2>/dev/null || true
 
-          make -j$(nproc) || make -j1 V=s
+          # 失败重试必须保持并行：原来的 make -j1 V=s 会退化成单线程，
+          # 一次偶发失败就能把几小时的编译拖过上限被取消
+          make -j$(nproc) || make -j$(nproc) V=s
 
           ccache -s 2>/dev/null || true
 
