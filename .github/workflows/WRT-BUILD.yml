@@ -23,7 +23,7 @@ on:
           - X86-qmodem
       SOURCE:
         description: '源码仓库'
-        default: 'VIKINGYFY/immortalwrt'
+        default: 'immortalwrt/immortalwrt'
         required: true
         type: choice
         options:
@@ -32,7 +32,7 @@ on:
           - chasey-dev/immortalwrt-mt798x-rebase
       BRANCH:
         description: '源码分支（VIKINGYFY 用 main / owrt，immortalwrt 用 master，chasey-dev 用 25.12）'
-        default: 'owrt'
+        default: 'master'
         required: true
         type: string
       PACKAGE:
