@@ -78,11 +78,11 @@ jobs:
           sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
           # 即使个别非必需源临时不可用也不中断初始化（重试一次）
           sudo -E apt -yqq update || sudo -E apt -yqq update
-          sudo -E apt -yqq full-upgrade
-          sudo -E apt -yqq autoremove --purge
+          # 不做 full-upgrade / autoremove：托管 runner 每次全量升级要数分钟，
+          # 对 OpenWrt 编译没有收益，属于纯耗时项
           sudo -E apt -yqq autoclean
           sudo -E apt -yqq clean
-          sudo -E apt -yqq install dos2unix libfuse-dev
+          sudo -E apt -yqq install dos2unix libfuse-dev ccache
           sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo -E systemctl daemon-reload
           sudo -E timedatectl set-timezone "Asia/Shanghai"
@@ -173,16 +173,31 @@ jobs:
         run: |
           find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\)$" -exec dos2unix {} \; -exec chmod +x {} \;
 
-      - name: Check Caches
+      - name: Check Caches (Toolchain & ccache)
         id: check-cache
         if: env.WRT_TEST != 'true'
         uses: actions/cache@v4
         with:
-          key: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
+          # 关键改动：缓存键只绑定「目标平台 + 源码 + 分支」，不再绑定 commit hash。
+          # 上游一有新提交也能通过 restore-keys 回退命中上次编译好的工具链。
+          key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
+          restore-keys: |
+            wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
           path: |
             ./wrt/.ccache
             ./wrt/staging_dir/host*
             ./wrt/staging_dir/tool*
+
+      - name: Check Caches (Download)
+        if: env.WRT_TEST != 'true'
+        uses: actions/cache@v4
+        with:
+          # 下载的源码包与机型无关，按「源码 + 分支」单独缓存，避免多机型各存一份
+          key: wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
+          restore-keys: |
+            wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
+          path: |
+            ./wrt/dl
 
       - name: Update Caches
         if: env.WRT_TEST != 'true'
@@ -199,14 +214,9 @@ jobs:
             echo "caches missed!"
           fi
 
-          if [ "${{ steps.check-cache.outputs.cache-hit }}" != 'true' ]; then
-            CACHE_LIST=$(gh cache list --json id --key "$WRT_CONFIG-$WRT_INFO" --jq '.[].id' 2>/dev/null)
-            for CACHE_ID in $CACHE_LIST; do
-              gh cache delete "$CACHE_ID"
-            done
-
-            echo "caches cleanup done!"
-          fi
+          # 不再在 cache miss 时删除历史缓存：
+          # 上面的 restore-keys 正是依赖历史缓存做前缀回退，删掉等于每次都冷启动。
+          # 配额交给 GitHub LRU 自动回收，必要时用 Cache-Clean 手动清理。
 
       - name: Update Feeds
         run: |
@@ -236,9 +246,13 @@ jobs:
             cat "$WRT_CONFIG_FILE" "$GITHUB_WORKSPACE/Config/GENERAL.txt" "$VARIANT_FILE" >> .config
           fi
 
+          # 启用 ccache，把编译缓存落到 ./.ccache（与上面缓存的 path 对应），
+          # 重复编译、仅改配置或插件时可大幅缩短耗时
+          echo "CONFIG_CCACHE=y" >> .config
+
           $GITHUB_WORKSPACE/Scripts/Settings.sh
 
-          make defconfig -j$(nproc) && make clean -j$(nproc)
+          make defconfig && make clean
 
       - name: Download Packages
         if: env.WRT_TEST != 'true'
@@ -252,7 +266,15 @@ jobs:
         run: |
           cd ./wrt/
 
+          # 指向被缓存的 .ccache 目录，限制容量并开启压缩，避免占满 10GB 配额
+          export CCACHE_DIR="$(pwd)/.ccache"
+          export CCACHE_MAXSIZE=5G
+          export CCACHE_COMPRESS=true
+          ccache -z 2>/dev/null || true
+
           make -j$(nproc) || make -j1 V=s
+
+          ccache -s 2>/dev/null || true
 
       - name: Machine Information
         run: |

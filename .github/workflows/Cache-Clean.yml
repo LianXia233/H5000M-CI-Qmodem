@@ -4,10 +4,8 @@
 name: Cache-Clean
 
 on:
-  #自动清理：每周一早上4点
-  schedule:
-    - cron: 0 20 * * 0
-  #手动清理
+  # 不再每周定时全量清空：那会让本周第一次编译必然冷启动（多花 20~40 分钟）。
+  # GitHub 会按 LRU 自动回收超配额缓存，需要彻底清理时手动触发本工作流即可。
   workflow_dispatch:
 
 permissions: write-all
