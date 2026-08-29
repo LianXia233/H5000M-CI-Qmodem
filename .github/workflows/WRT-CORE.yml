@@ -345,10 +345,39 @@ jobs:
           ccache -z 2>/dev/null || true
 
           # 失败重试必须保持并行：原来的 make -j1 V=s 会退化成单线程，
-          # 一次偶发失败就能把几小时的编译拖过上限被取消
-          make -j$(nproc) || make -j$(nproc) V=s
+          # 一次偶发失败就能把几小时的编译拖过上限被取消。
+          # 输出同时写入 build.log：失败时提取首个出错包并以 ::error:: 注解上报，
+          # 注解可经 check-runs API 直接读取，无需下载 blob 原始日志。
+          set -o pipefail
+
+          make -j$(nproc) 2>&1 | tee build.log
+          RC=${PIPESTATUS[0]}
+
+          if [ "$RC" -ne 0 ]; then
+            echo "第一次编译失败（rc=$RC），保持并行重试并追加日志"
+            make -j$(nproc) V=s 2>&1 | tee -a build.log
+            RC=${PIPESTATUS[0]}
+          fi
+
+          if [ "$RC" -ne 0 ]; then
+            echo "::group::编译失败诊断"
+            # OpenWrt/ImmortalWrt 失败标志：ERROR: package/xxx failed to build / Error N / Image too big
+            grep -E "^(ERROR: |make(\\[[0-9]+\\])?: \*\*\* ).*(failed to build|Error [0-9]|too big)" build.log \
+              | sort -u | head -n 10 | while IFS= read -r LINE; do echo "::error::$LINE"; done
+
+            if ! grep -qE "^(ERROR: |make(\\[[0-9]+\\])?: \*\*\* )" build.log; then
+              echo "::error::未匹配到包级错误行，输出日志末尾 30 行"
+              tail -n 30 build.log
+            else
+              echo "--- 编译错误上下文（C/C++ / 链接 / 镜像）---"
+              grep -nE "error:|Error [0-9]+|collect2:|undefined reference|too big" build.log | head -n 25
+            fi
+            echo "::endgroup::"
+          fi
 
           ccache -s 2>/dev/null || true
+
+          exit "$RC"
 
       - name: Machine Information
         run: |
