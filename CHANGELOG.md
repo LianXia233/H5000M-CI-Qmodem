@@ -4,28 +4,29 @@
 
 ### 优化
 
-- **编译耗时优化（缓存失效修复 + 超时保护 + Rust 预编译）**：AP3000M 机型此前单次编译 5.5 小时以上，并多次超过 GitHub Actions 6 小时上限被取消，定位为三个叠加问题并逐一修复：
-  - **缓存几乎从不命中**：`WRT-CORE.yml` 的工具链缓存键绑定了源码 commit hash（上游一有提交即整体失效），`ccache` 也从未真正启用，导致每次都从零构建工具链。已将缓存键改为「目标平台 + 源码 + 分支」并补 `restore-keys` 前缀回退，新增独立的 `dl/` 下载缓存，启用 `CONFIG_CCACHE` 并将 `CCACHE_DIR` 指向被缓存目录（限 5G、开启压缩）。实测 H5000M 命中缓存后编译由 **3h13m 降至 31m**。
-  - **超时后缓存无法保存**：作业被平台 6 小时硬上限杀掉时，缓存的 post 保存步骤整段跳过，形成「超时 → 无缓存 → 下次继续冷编译 → 再超时」的死循环。已新增 `timeout-minutes: 345`（低于硬上限）、为两个缓存步骤开启 `save-always: true`，并把编译失败重试由 `make -j1 V=s` 改为 `make -j$(nproc) V=s`，避免单线程回退把几小时的编译拖过上限。
-  - **Rust 主机工具链（仅 AP3000M）**：`luci-app-airpi-fancontrol` 的守护进程由 Rust 编写，默认会走 OpenWrt 的 `rust/host` 从源码构建完整 Rust + LLVM 工具链，这是 AP3000M 比同为 filogic 的 H5000M 恒定慢约 2 小时的原因。已照搬上游 [luci-app-airpi3000m-fancontrol](https://github.com/LianXia233/luci-app-airpi3000m-fancontrol) 的 CI 做法：用 runner 自带的 rustup 配合源码树里已构建好的 aarch64 musl 交叉链接器直接 `cargo build --target aarch64-unknown-linux-musl`，再通过 `AIRPI_PREBUILT=1` / `AIRPI_PREBUILT_BIN` 交给包 Makefile，完全跳过 `rust/host` 构建；预编译失败会自动回退到源码构建并给出警告，不影响固件产出。预编译的注入调用同样置于受保护子 shell 内，一旦注入失败（例如上游 Makefile 版式变化导致锚点缺失）会自动回退，不会让固件编译中断。
-- **AP3000M 专用插件按机型条件引入**：`luci-app-airpi-fancontrol` 与 `kmod-airpi-gpio-fan` 改为仅 `WRT_CONFIG` 含 `AP3000M` 时才克隆引入，H5000M / X86 不再拉取这两个包。
-
-### 变更文件
-
-- `.github/workflows/WRT-CORE.yml` — 缓存键与 `restore-keys` 改造、新增 `dl` 缓存、启用 ccache、`timeout-minutes`、缓存 `save-always`、并行重试、新增 AirPi Rust 预编译步骤
-- `.github/workflows/Cache-Clean.yml` — 取消每周定时全量清缓存（改为手动触发），避免每周一次强制冷启动
-- `Scripts/Packages.sh` — AirPi 插件按机型条件引入
-- `Scripts/inject_airpi_prebuilt.py` — 新增，向 `luci-app-airpi-fancontrol` 的 Makefile 注入 `AIRPI_PREBUILT` 标记
-- `Config/AP3000M-qmodem.txt`、`Config/AP3000M-qmodem-next.txt` — 移除无人使用的 `luci-compat` / `luci-lua-runtime`（插件 v4.0 起为纯 JS 实现，仅依赖 `luci-base`）
+- **编译缓存失效修复**（`2382aacb`）：工具链缓存键原先绑定源码 commit hash，上游一有提交即整体失效，加上 `ccache` 从未真正启用，导致每次都从零构建工具链。已将缓存键改为「目标平台 + 源码 + 分支」并补 `restore-keys` 前缀回退，新增独立的 `dl/` 下载缓存，启用 `CONFIG_CCACHE` 并将 `CCACHE_DIR` 指向被缓存目录（限 5G、开启压缩），同时移除 cache miss 时清空历史缓存的逻辑。实测 H5000M 命中缓存后编译由 **3h13m 降至 31m**。
+- **编译超时保护**（`024aa52c`）：作业被平台 6 小时硬上限杀掉时，缓存的 post 保存步骤整段跳过，形成「超时 → 无缓存 → 下次继续冷编译 → 再超时」的死循环。已新增 `timeout-minutes: 345`（低于硬上限）、为两个缓存步骤开启 `save-always: true`，并把编译失败重试由 `make -j1 V=s` 改为 `make -j$(nproc) V=s`，避免单线程回退把几小时的编译拖过上限。
+- **AirPi Rust 预编译，跳过 rust/host 构建（仅 AP3000M）**（`413bbf4d`）：`luci-app-airpi-fancontrol` 的守护进程由 Rust 编写，默认会走 OpenWrt 的 `rust/host` 从源码构建完整 Rust + LLVM 工具链，这是 AP3000M 比同为 filogic 的 H5000M 恒定慢约 2 小时、并多次撞破 6 小时上限的原因。已照搬上游 [luci-app-airpi3000m-fancontrol](https://github.com/LianXia233/luci-app-airpi3000m-fancontrol) 的 CI 做法：用 runner 自带的 rustup 配合源码树里已构建好的 aarch64 musl 交叉链接器直接 `cargo build --target aarch64-unknown-linux-musl`，再通过 `AIRPI_PREBUILT=1` / `AIRPI_PREBUILT_BIN` 交给包 Makefile，完全跳过 `rust/host` 构建；预编译失败会自动回退到源码构建并给出警告，不影响固件产出。
+- **预编译注入失败安全回退**（`d1425db4`）：`AIRPI_PREBUILT` 的注入调用原先落在受保护子 shell 之外，一旦注入失败（例如上游 Makefile 版式变化导致锚点 `include $(TOPDIR)/rules.mk` 缺失）会让整个步骤失败、中断固件编译，与设计意图相反。已将注入调用移入受保护子 shell，失败时由外层 `if` 接管进入回退分支；同时把 `PKG_DIR` / `PREBUILT_DIR` 改为绝对路径，修正子 shell 内 `cd` 导致的相对路径失效。
+- **AP3000M 专用插件按机型条件引入**（`413bbf4d`）：`luci-app-airpi-fancontrol` 与 `kmod-airpi-gpio-fan` 改为仅 `WRT_CONFIG` 含 `AP3000M` 时才克隆引入。该插件按 AP3000M 的 GPIO / PWM sysfs 路径 / 温度传感器探测顺序适配，H5000M 与 X86 用不到也不具备对应硬件依赖，无需再拉取扫描。
 
 ### 变更
 
-- **源码切换：H5000M / AP3000M 改为 VIKINGYFY/immortalwrt `owrt` 分支**：`MTK-AUTO` 工作流对应配置（H5000M / AP3000M）由原源码切换至 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支；`X86` 配置保持 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 主线 `master` 分支不变。已推送至远端 `main`（HEAD `87ef5b4`）。
+- **源码切换：H5000M / AP3000M 改为 VIKINGYFY/immortalwrt `owrt` 分支**（`87ef5b49`）：`MTK-AUTO` 工作流对应配置（H5000M / AP3000M）由原源码切换至 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支；`X86` 配置保持 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 主线 `master` 分支不变。
 
 ### 文档同步
 
 - `README.md` — 支持配置表新增「编译源码」列并补 X86 行；快速开始、固件底包、源码上游鸣谢补充双源码分支说明；在线升级标签示例更新为 `H5000M-qmodem-next-VIKINGYFY-owrt-...` / `X86-qmodem-next-immortalwrt-master-...`；文档更新日期改为 2026-08-29
 - `index.html` — 「技术规格」卡片改为「双源码构建」，注明 H5000M / AP3000M 基于 VIKINGYFY owrt 分支、x86 基于主线 master
+- `CHANGELOG.md` — 重构当日条目，按提交分条记录本轮编译耗时优化
+
+### 变更文件
+
+- `.github/workflows/WRT-CORE.yml` — 缓存键与 `restore-keys` 改造、新增 `dl` 缓存、启用 ccache、`timeout-minutes`、缓存 `save-always`、并行重试、新增 AirPi Rust 预编译步骤、注入调用移入受保护子 shell
+- `.github/workflows/Cache-Clean.yml` — 取消每周定时全量清缓存（改为手动触发），避免每周一次强制冷启动
+- `Scripts/Packages.sh` — AirPi 插件按机型条件引入
+- `Scripts/inject_airpi_prebuilt.py` — 新增，向 `luci-app-airpi-fancontrol` 的 Makefile 注入 `AIRPI_PREBUILT` 标记
+- `Config/AP3000M-qmodem.txt`、`Config/AP3000M-qmodem-next.txt` — 移除无人使用的 `luci-compat` / `luci-lua-runtime`（插件 v4.0 起为纯 JS 实现，仅依赖 `luci-base`）
 
 ## [2026-08-25]
 
