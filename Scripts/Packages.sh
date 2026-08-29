@@ -84,7 +84,12 @@ UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
 
 # FAN789 插件及其他专用硬件插件
 UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "FAN789/luci-app-h5000m-fancontrol" "main"
-UPDATE_PACKAGE "luci-app-airpi-fancontrol" "LianXia233/luci-app-airpi3000m-fancontrol" "main" "all"
+# AirPi AP3000M 专用（luci-app-airpi-fancontrol + airpi-gpio-fan 内核模块）：
+# 仅 AP3000M 配置引入。该插件按 AP3000M 的 GPIO / PWM / 温度传感器适配，
+# H5000M 与 X86 用不到，也不具备对应硬件依赖，无需拉取（省一次克隆与包扫描）
+if [[ "${WRT_CONFIG:-}" == *AP3000M* ]]; then
+	UPDATE_PACKAGE "luci-app-airpi-fancontrol" "LianXia233/luci-app-airpi3000m-fancontrol" "main" "all"
+fi
 UPDATE_PACKAGE "luci-app-mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "luci-app-h5000m-netmode" "LianXia233/luci-app-h5000m-netmode" "main"
 
