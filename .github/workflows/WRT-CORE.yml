@@ -291,16 +291,25 @@ jobs:
             exit 0
           fi
 
-          # 整段放在受保护子 shell 内：任何一步失败都进入 else 回退，
-          # 不会让整个步骤失败（GitHub Actions 的 run 默认遇错即停）
-          if (
+          # 失败即回退的正确写法：先在父 shell 关闭 errexit（GHA 的 run 默认是
+          # bash -e），再把受保护子 shell 当作普通语句执行并取回退出码。
+          # 不能写成 `if ( set -e; ... ); then`：作为 if 条件的复合命令会使其中的
+          # errexit 全部失效，子 shell 会一路跑到底，最终由最后一条命令的退出码
+          # 决定分支，中途失败被完全吞掉。
+          set +e
+          (
             set -euxo pipefail
 
             # 确保目标交叉链接器就绪：命中缓存时秒过，冷编译才会真正构建工具链
             make toolchain/install -j$(nproc)
 
-            LINKER="$(find ./staging_dir -type f -name 'aarch64-*linux-musl-gcc' -perm -111 | head -1)"
+            # 绝对路径：下面会 cd 进 $PKG_DIR/src，cargo 按当前工作目录解析相对
+            # linker，写相对路径会得到 "linker ... not found"
+            LINKER="$(find "$(pwd)/staging_dir" -type f -name 'aarch64-openwrt-linux-musl-gcc' -perm -111 | head -1)"
+            [ -n "$LINKER" ] || LINKER="$(find "$(pwd)/staging_dir" -type f -name 'aarch64-*linux-musl-gcc' -perm -111 | head -1)"
             [ -n "$LINKER" ] || { echo "未找到 aarch64 musl 交叉链接器"; exit 1; }
+            LINKER="$(readlink -f "$LINKER")"
+            echo "使用交叉链接器: $LINKER"
 
             # runner 镜像通常自带 rustup，缺失时最小化安装
             if ! command -v rustup >/dev/null 2>&1; then
@@ -316,20 +325,35 @@ jobs:
             cd "$PKG_DIR/src"
             cargo build --locked --release --target aarch64-unknown-linux-musl
 
-            mkdir -p "$PREBUILT_DIR"
-            cp -f target/aarch64-unknown-linux-musl/release/airpi-fanctl "$PREBUILT_DIR/airpi-fanctl"
+            # 产物自检：cargo 退出 0 但产物缺失同样按失败处理，
+            # 绝不能带着空目录进入注入分支
+            BIN="target/aarch64-unknown-linux-musl/release/airpi-fanctl"
+            [ -f "$BIN" ] || { echo "cargo 未产出 $BIN"; exit 1; }
 
-            # 让包走预编译分支，跳过 rust/host 源码构建。
-            # 必须留在受保护子 shell 内：注入失败时（例如上游 Makefile 改了版式、
-            # 锚点 include $(TOPDIR)/rules.mk 找不到）脚本返回非零，会由外层 if
-            # 接管进入回退分支，而不是让整个步骤失败
+            mkdir -p "$PREBUILT_DIR"
+            cp -f "$BIN" "$PREBUILT_DIR/airpi-fanctl"
+
+            # 让包走预编译分支，跳过 rust/host 源码构建
             python3 "$GITHUB_WORKSPACE/Scripts/inject_airpi_prebuilt.py" "$PKG_DIR/Makefile"
-          ); then
+          )
+          RC=$?
+          set -e
+
+          if [ "$RC" -eq 0 ]; then
             echo "airpi-fanctl 预编译完成，本次将跳过 rust/host 构建"
           else
-            echo "::warning::airpi-fanctl 预编译失败，回退到源码构建 rust/host（本次编译将额外增加约 1.5~3 小时）"
+            echo "::warning::airpi-fanctl 预编译失败（rc=$RC），回退到源码构建 rust/host（本次编译将额外增加约 1.5~3 小时）"
             # 清掉半成品：包 Makefile 未带 AIRPI_PREBUILT 标记时仍会走源码构建，
             # 留着二进制只会占空间并造成状态不一致
+            rm -rf "$PREBUILT_DIR"
+          fi
+
+          # 一致性兜底：Makefile 已被标记预编译但二进制缺失时，
+          # Build/Compile 里的 $(INSTALL_BIN) 会因 no such file 直接失败。
+          # 这里主动撤销注入，确保任何情况下都不会停在这个死状态。
+          if grep -q '^AIRPI_PREBUILT:=1$' "$PKG_DIR/Makefile" && [ ! -f "$PREBUILT_DIR/airpi-fanctl" ]; then
+            echo "::warning::预编译标记与二进制不一致，撤销注入并回退源码构建"
+            sed -i '/^AIRPI_PREBUILT:=1$/d; /^AIRPI_PREBUILT_BIN:=/d' "$PKG_DIR/Makefile"
             rm -rf "$PREBUILT_DIR"
           fi
 
@@ -348,7 +372,10 @@ jobs:
           # 一次偶发失败就能把几小时的编译拖过上限被取消。
           # 输出同时写入 build.log：失败时提取首个出错包并以 ::error:: 注解上报，
           # 注解可经 check-runs API 直接读取，无需下载 blob 原始日志。
-          set -o pipefail
+          # 必须同时关闭 errexit：GHA 的 run 以 bash -e 执行，
+          # 开了 pipefail 后首次 make 失败会让整个步骤就地终止，
+          # 后面的重试与失败诊断分支永远不会执行（只会留下 exit code 2）。
+          set +e -o pipefail
 
           make -j$(nproc) 2>&1 | tee build.log
           RC=${PIPESTATUS[0]}
