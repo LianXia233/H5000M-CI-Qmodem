@@ -48,7 +48,8 @@ OpenWRT-CI-H5000M/
 ├── Scripts/
 │   ├── Packages.sh   # 下载 / 更新第三方插件与主题
 │   ├── Handles.sh    # EEPROM 自动注入、HomeProxy 资源预置与各类插件兼容修复
-│   └── Settings.sh   # 默认值、WIFI、主机名等个性化设置
+│   ├── Settings.sh   # 默认值、WIFI、主机名等个性化设置
+│   └── inject_airpi_prebuilt.py  # 向 luci-app-airpi-fancontrol 的 Makefile 注入 AIRPI_PREBUILT 标记（仅 AP3000M，预编译成功时调用）
 ├── index.html        # 固件发布落地页
 ├── CHANGELOG.md      # 更新日志
 ├── LICENSE
@@ -179,5 +180,5 @@ OpenWRT-CI-H5000M/
 
 <br>
 
-> 📅 *文档更新日期：2026年8月29日*
+> 📅 *文档更新日期：2026年8月31日*
 > 💡 *本说明文档由项目编译配置与社区开源信息整合生成。*

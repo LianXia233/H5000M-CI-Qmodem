@@ -1,4 +1,19 @@
 # 更新日志
+
+## [2026-08-31]
+
+### 修复
+
+- **AP3000M 编译失败：预编译相对路径 + 失败回退判定失效**（`39960f0`）：`MTK-AUTO` 中 `AP3000M-qmodem` 与 `AP3000M-qmodem-next` 自 8 月 29 日起稳定在 `Compile Firmware` 步骤失败，报 `ERROR: package/luci-app-airpi-fancontrol failed to build`；同 run 中同为 filogic 平台的 H5000M 两个配置均构建成功。与依赖缺失、语法错误、ImmortalWrt 上游源码无关，是三处脚本缺陷叠加：
+  - **交叉链接器使用了相对路径**：`Prebuild AirPi Rust Binary` 步骤以 `find ./staging_dir` 取得 `./staging_dir/toolchain-.../aarch64-openwrt-linux-musl-gcc`，随后脚本 `cd` 进 crate 目录执行 `cargo build`；cargo 按调用时的 CWD 解析 `CARGO_TARGET_<TRIPLE>_LINKER`，实际去找 `<crate>/./staging_dir/...`，必然 `linker ... not found`，预编译以 exit 101 失败。已改为 `find "$(pwd)/staging_dir"` 并追加 `readlink -f` 归一化，同时优先精确匹配 `aarch64-openwrt-linux-musl-gcc`，避免 `head -1` 命中带版本号后缀的变体。
+  - **失败回退判定失效（致命放大器）**：该步骤用 `if ( set -e ... ); then` 承载整段逻辑，但 bash 在 `if` 条件求值上下文中会忽略 `errexit`——`cargo` 失败后脚本继续往下执行，`if` 最终取**最后一条命令**（`inject_airpi_prebuilt.py`，exit 0）的退出码，于是错误地注入 `AIRPI_PREBUILT:=1` 并打印「预编译完成」，步骤结论为 `success`。包 Makefile 的预编译分支随后 `INSTALL_BIN` 一个并不存在的二进制，直接失败。已改为 `set +e; ( ... ); RC=$?; set -e`，让 `errexit` 真正生效、退出码可被正确捕获。实测 `if ( set -e ... )`、函数 + `if f`、`( ... ) || RC=$?` 三种写法均会让 `errexit` 失效，只有先 `set +e` 再取 `$?` 有效。
+  - **编译重试与诊断分支从不执行**：`Compile Firmware` 的 `set -o pipefail` 叠加 GitHub Actions `run` 默认的 `bash -e`，首次 `make` 失败即让整个步骤就地终止，既不会以 `V=s` 并行重试，也不会输出出错包注解，日志里只剩 `Process completed with exit code 2`，显著抬高定位成本。已改为 `set +e -o pipefail`。
+- 另新增两道防御：`cargo` 退出 0 但产物缺失时同样判定为失败；包 Makefile 已被标记预编译而二进制不存在时，自动撤销注入并回退 `rust/host` 源码构建。
+
+### 变更文件
+
+- `.github/workflows/WRT-CORE.yml` — 链接器绝对路径化与 `readlink -f` 归一化、失败回退改为 `set +e` + `$?` 捕获、产物自检、预编译标记一致性兜底、编译步骤改 `set +e -o pipefail`
+
 ## [2026-08-29] 源码切换：H5000M / AP3000M 改用 ImmortalWrt 主线
 ### Changed
 - MTK-AUTO 工作流中 H5000M / AP3000M 的 `SOURCE` 由 `VIKINGYFY/immortalwrt` 切换为 `immortalwrt/immortalwrt`，`BRANCH` 由 `owrt` 调整为 `master`；X86（OWRT-ALL）保持 `immortalwrt/immortalwrt` + `master` 不变。
