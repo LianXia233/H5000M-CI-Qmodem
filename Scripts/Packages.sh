@@ -119,6 +119,29 @@ UPDATE_PACKAGE "luci-app-qmodem-generic" "LianXia233/luci-app-qmodem-generic" "m
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
+
+# ===== sing-box 过时补丁清理（2026-09-24 MTK-AUTO / OWRT-ALL 同时失败根因）=====
+# VIKINGYFY/packages 的 sing-box 自带 patches/100-fix-dns-tcp-close.patch，它是针对
+# 旧版 sing-box 的反向移植（引入上游从未合入的 HandleStreamDNSConnection）。当 feed 把
+# sing-box 升到 1.15.0_alpha8 后，该补丁上下文已与上游源码（仍是 HandleStreamDNSRequest）
+# 不匹配，OpenWrt 在 Build/Prepare 阶段应用补丁报 “Patch failed!” 并 Error 1，
+# 进而令整个固件编译中断（今日 MTK-AUTO 与 OWRT-ALL 两个定时构建同时失败即此因）。
+# 上游 immortalwrt/packages 的 sing-box 根本不携带该补丁也能正常构建，故这里在补丁确为
+# 旧版（内容含 HandleStreamDNSConnection）时移除它，恢复构建。若 VIKINGYFY 后续刷新该补丁
+# 为适配新源码的版本，本规则因标记不匹配而自动跳过，不会误删新版补丁。
+FIX_SINGBOX_STALE_PATCH() {
+	local PATCH="./packages/sing-box/patches/100-fix-dns-tcp-close.patch"
+	[ -f "$PATCH" ] || { echo "sing-box: 无 100-fix-dns-tcp-close.patch，跳过"; return 0; }
+	# 仅当补丁仍为旧版（引入未合入上游的 HandleStreamDNSConnection）时才移除
+	if grep -q "HandleStreamDNSConnection" "$PATCH"; then
+		rm -f "$PATCH"
+		echo "sing-box: 移除过时补丁 100-fix-dns-tcp-close.patch（与 1.15.0_alpha8 源码不匹配）"
+	else
+		echo "sing-box: 100-fix-dns-tcp-close.patch 已非旧版，保留"
+	fi
+}
+FIX_SINGBOX_STALE_PATCH
+
 UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
 
 # FAN789 插件及其他专用硬件插件
