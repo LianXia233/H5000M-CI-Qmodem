@@ -1,5 +1,54 @@
 # 更新日志
 
+## [2026-10-17] 修复 miniupnpd 2.3.11 补丁链断裂：移除过时 030，刷新 040 适配新版
+
+### 背景
+
+删掉 020-descr-filter-fix.patch 后推送的 run #102（OWRT-ALL，4e881f7）中，
+X86-qmodem 与 X86-qmodem-next 两个 job 依旧在「Compile Firmware」失败，
+卡点从 020 后移到 030-allow-private-fix.patch。
+
+### 根因
+
+miniupnpd 2.3.11（immortalwrt/packages dd29469e22 合入）相对补丁基线
+2.3.x 旧版发生两处结构性变动，feed 补丁逐一失效：
+
+1. **030-allow-private-fix.patch**（1 hunk）：
+   改的是 `GetExternalIPAddress` 中 `!GETFLAG(ALLOWPRIVATEIPV4MASK)` →
+   `GETFLAG(ALLOWPRIVATEIPV4MASK)` 的条件反转。经比对 miniupnpd 上游
+   2.3.11 tag（miniupnpd_2_3_11）`upnpsoap.c`，该 fix 已被上游吸收
+   （第 421 行即无 `!` 的正确写法），补丁 `-` 行找不到匹配，
+   `Hunk #1 FAILED at 370`，删除无功能损失。
+2. **040-improve-logging.patch**（12 hunk，默认 fuzz=2 下 4 个失败）：
+   - hunk #3/#4（print_usage 文案）：2.3.11 将 print_usage 前移至
+     main() 之前（约 1309 行），而 patch 搜索起点在 init() 之后的
+     旧位置（约 2206 行），向后搜索永远匹配不到；
+   - hunk #6/#7（HTTP/HTTPS listening 日志）：2.3.11 在
+     `v.port = listen_port;` 与 syslog 之间插入 `ENABLE_NFQUEUE`
+     三行，超出 GNU patch 默认 fuzz=2 容忍度。
+   该补丁仍是有效下游定制（SSDP 日志 INFO→DEBUG 降噪、启动横幅重写、
+   secure_mode/PCP 第三方映射警告、usage 文案），直接删除有功能损失，
+   必须刷新而非移除。
+
+### 修复
+
+- `.github/workflows/WRT-CORE.yml`：Update Feeds 步骤追加两段 workaround：
+  1. 删除已被上游吸收的 `030-allow-private-fix.patch`；
+  2. 用仓库内重新生成的
+     `Scripts/patches/miniupnpd-040-improve-logging-2.3.11.patch`
+     原地替换 `040-improve-logging.patch`。新补丁基于 miniupnpd 上游
+     2.3.11 tag 源码重新生成，覆盖原补丁全部 12 个文件，已本地
+     `patch -p1` 严格验证：12/12 文件零 offset、零 fuzz、零 FAILED。
+- `Scripts/patches/miniupnpd-040-improve-logging-2.3.11.patch`：新增。
+- `.gitattributes`：补充 `*.patch text eol=lf`。
+
+上游刷新这两个补丁后可移除本 workaround。
+
+### 验证
+
+推送后手动 workflow_dispatch 触发 OWRT-ALL，确认 miniupnpd
+（nftables/iptables 双变体）通过、Compile Firmware 步骤完成。
+
 ## [2026-10-17] 修复全平台编译中断：移除 immortalwrt/packages 中过时的 miniupnpd 补丁
 
 ### 背景

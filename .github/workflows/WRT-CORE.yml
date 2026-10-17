@@ -278,6 +278,29 @@ jobs:
             echo "Removed obsolete miniupnpd patch 020-descr-filter-fix.patch (merged upstream in miniupnpd 2.3.11)"
           fi
 
+          # 2026-10-17 修复（run #102 复现）：删掉 020 后 030-allow-private-fix.patch
+          # 紧接着失败。该补丁仅一行改动（GetExternalIPAddress 中
+          # !GETFLAG(ALLOWPRIVATEIPV4MASK) → GETFLAG(ALLOWPRIVATEIPV4MASK)），
+          # miniupnpd 2.3.11 上游 upnpsoap.c 已是无 ! 的正确逻辑，补丁被吸收，
+          # 打不上（Hunk #1 FAILED at 370），删除无功能损失。
+          if [[ -f feeds/packages/net/miniupnpd/patches/030-allow-private-fix.patch ]]; then
+            rm -f feeds/packages/net/miniupnpd/patches/030-allow-private-fix.patch
+            echo "Removed obsolete miniupnpd patch 030-allow-private-fix.patch (merged upstream in miniupnpd 2.3.11)"
+          fi
+
+          # 2026-10-17 修复：040-improve-logging.patch 基于 2.3.x 旧版编写，
+          # 2.3.11 中 print_usage 被前移至 main() 之前（hunk #3/#4 的搜索起点
+          # 在 init() 之后，永远匹配不到），且 v.port = listen_port 与 syslog
+          # 之间新增 ENABLE_NFQUEUE 三行导致 hunk #6/#7 超出默认 fuzz=2，
+          # 默认 fuzz 下 12 个 hunk 中 4 个失败。该补丁仍是有效下游定制
+          # （日志降噪、启动横幅、安全模式警告），不能简单删除。
+          # 用仓库内针对 2.3.11 重新生成的等价补丁原地替换，上游刷新后可移除。
+          if [[ -f feeds/packages/net/miniupnpd/patches/040-improve-logging.patch ]]; then
+            cp -f "$GITHUB_WORKSPACE/Scripts/patches/miniupnpd-040-improve-logging-2.3.11.patch" \
+              feeds/packages/net/miniupnpd/patches/040-improve-logging.patch
+            echo "Refreshed miniupnpd patch 040-improve-logging.patch for miniupnpd 2.3.11"
+          fi
+
       - name: Custom Packages
         run: |
           cd ./wrt/package/
