@@ -1,5 +1,45 @@
 # 更新日志
 
+## [2026-10-18] miniupnpd 2.3.11 修复独立复验：补丁链整链通过（含 900 补丁）
+
+### 背景
+
+224ba16b0 推送后尚无构建类 run 覆盖，本次对修复做独立复现验证，
+不采信提交自述，全部结论来自本地实测。
+
+### 验证方法与结果
+
+1. 源码真实性：下载 miniupnpd 上游 2.3.11 发布包
+   （miniupnpd_2_3_11/miniupnpd-2.3.11.tar.gz），sha256 与 feed
+   Makefile 的 PKG_HASH 一致（91994b12...c48678）。
+2. 030 吸收确认：2.3.11 的 upnpsoap.c 第 421 行为
+   `if (GETFLAG(ALLOWPRIVATEIPV4MASK))`（无 `!`），与删除 030 的
+   前提一致，无功能损失。
+3. 新版 040 独立干跑：纯净 2.3.11 源码上 `patch -p1 --dry-run`，
+   12/12 文件零 offset、零 fuzz、零 FAILED。
+4. 整链复现（CI 实际顺序 010 → 040 替换版 → 900）：
+   - 010：3 hunk 成功（offset 4/66/84 行）；
+   - 040 替换版：全部 hunk 成功（相对 010 有小 offset，零 FAILED）；
+   - 900-miniupnpd-format-xml-to-make-some-app-happy.patch：
+     33 hunk 全部成功（2 个 fuzz 2，最大 offset +231 行）。
+     注意失败 run 在 030 即中断，040/900 从未在 CI 中被尝试，
+     属未验证区；本次实测可通过，不存在下一个断点。
+5. 补充核对：新旧 040 补丁文件覆盖 12/12 一致；仓库版补丁为纯 LF；
+   WRT-CORE.yml 通过 yaml.safe_load；MTK-AUTO / OWRT-ALL / WRT-BUILD
+   均 `uses: ./.github/workflows/WRT-CORE.yml`，修复一处覆盖全部入口。
+
+### 排错记录
+
+900 补丁干跑时 upnpsoap.c 的 hunk #1/#2 无输出行，一度疑似被静默
+跳过。实打应用后确认 beforebody 已正确插入 \r\n——该现象系
+GNU patch 2.7.6 对零 offset 的 hunk 不打印 succeeded 行所致，
+非补丁丢失。
+
+### 待办
+
+224ba16b0 之后仍无构建 run，CI 端到端确认待下一次定时构建
+（MTK-AUTO / OWRT-ALL）或手动 workflow_dispatch 完成。
+
 ## [2026-10-17] 修复 miniupnpd 2.3.11 补丁链断裂：移除过时 030，刷新 040 适配新版
 
 ### 背景
