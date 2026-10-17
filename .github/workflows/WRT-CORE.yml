@@ -267,6 +267,17 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+          # 2026-10-17 修复：immortalwrt/packages 合并官方源（dd29469e22）后
+          # miniupnpd 升级到 2.3.11，feed 自带的 020-descr-filter-fix.patch
+          # 针对的是旧版解析器，其全部改动（upnppermissions.c 解析器重写、
+          # upnppermissions.h 的 const char * 签名）已被 2.3.11 上游吸收，
+          # 继续打补丁会因 7 个 hunk 中 5 个失败而中断所有平台的编译。
+          # 删除该过时补丁，无功能损失；上游刷新补丁后可移除本 workaround。
+          if [[ -f feeds/packages/net/miniupnpd/patches/020-descr-filter-fix.patch ]]; then
+            rm -f feeds/packages/net/miniupnpd/patches/020-descr-filter-fix.patch
+            echo "Removed obsolete miniupnpd patch 020-descr-filter-fix.patch (merged upstream in miniupnpd 2.3.11)"
+          fi
+
       - name: Custom Packages
         run: |
           cd ./wrt/package/
