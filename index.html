@@ -14,13 +14,13 @@
       --accent: #ec4899;
       --accent-gradient: linear-gradient(135deg, #0284c7 0%, #6366f1 50%, #ec4899 100%);
       --text-main: #0f172a;
-      --text-muted: #475569;
-      --text-light: #94a3b8;
-      --bg-glass: rgba(255, 255, 255, 0.92);
-      --bg-glass-card: rgba(255, 255, 255, 0.96);
-      --bg-solid: #ffffff;
-      --border-glass: rgba(255, 255, 255, 0.85);
-      --border-card: #e2e8f0;
+      --text-muted: #334155;
+      --text-light: #64748b;
+      --bg-glass: rgba(255, 255, 255, 0.68);
+      --bg-glass-card: rgba(255, 255, 255, 0.74);
+      --bg-solid: rgba(255, 255, 255, 0.76);
+      --border-glass: rgba(255, 255, 255, 0.75);
+      --border-card: rgba(255, 255, 255, 0.65);
       --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
       --shadow-md: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
       --shadow-lg: 0 20px 35px -5px rgba(0, 0, 0, 0.08), 0 10px 15px -5px rgba(0, 0, 0, 0.04);
@@ -28,14 +28,14 @@
       --radius-md: 14px;
       --radius-lg: 20px;
       --radius-xl: 28px;
-      --overlay-alpha: rgba(248, 250, 252, 0.72);
+      --overlay-alpha: rgba(255, 255, 255, 0.22);
       --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     /* Theme Modes for Wallpaper Overlay */
-    body[data-overlay="clear"] { --overlay-alpha: rgba(255, 255, 255, 0.92); }
-    body[data-overlay="vibrant"] { --overlay-alpha: rgba(248, 250, 252, 0.48); }
-    body[data-overlay="standard"] { --overlay-alpha: rgba(248, 250, 252, 0.72); }
+    body[data-overlay="clear"] { --overlay-alpha: rgba(255, 255, 255, 0.55); }
+    body[data-overlay="vibrant"] { --overlay-alpha: rgba(255, 255, 255, 0.08); }
+    body[data-overlay="standard"] { --overlay-alpha: rgba(255, 255, 255, 0.22); }
 
     * {
       box-sizing: border-box;
@@ -67,7 +67,7 @@
       right: 0;
       bottom: 0;
       background: var(--overlay-alpha);
-      backdrop-filter: blur(6px);
+      backdrop-filter: blur(1px);
       z-index: -1;
       transition: background 0.4s ease;
       pointer-events: none;
@@ -94,9 +94,9 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(255, 255, 255, 0.88);
-      backdrop-filter: blur(16px);
-      border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+      background: rgba(255, 255, 255, 0.76);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.6);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
       transition: var(--transition);
     }
@@ -194,13 +194,14 @@
       color: #fff;
     }
     .btn-secondary {
-      background: #ffffff;
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(8px);
       color: var(--text-main);
-      border: 1px solid #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.85);
       box-shadow: var(--shadow-sm);
     }
     .btn-secondary:hover {
-      background: #f8fafc;
+      background: rgba(255, 255, 255, 0.95);
       border-color: #94a3b8;
       color: var(--text-main);
     }
@@ -283,8 +284,9 @@
       align-items: center;
       gap: 8px;
       padding: 6px 16px;
-      background: #ffffff;
-      border: 1px solid #e0f2fe;
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
       border-radius: 9999px;
       box-shadow: var(--shadow-sm);
       margin-bottom: 20px;
@@ -346,8 +348,9 @@
       font-weight: 600;
       padding: 5px 12px;
       border-radius: 9999px;
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.85);
       color: var(--text-muted);
       box-shadow: 0 1px 3px rgba(0,0,0,0.03);
     }
@@ -409,11 +412,11 @@
     }
     .glass-panel {
       background: var(--bg-glass);
-      backdrop-filter: blur(20px);
+      backdrop-filter: blur(10px) saturate(125%);
       border: 1px solid var(--border-glass);
       border-radius: var(--radius-xl);
       padding: 35px;
-      box-shadow: var(--shadow-lg);
+      box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
       margin-bottom: 35px;
     }
     .section-header {
@@ -451,7 +454,8 @@
 
     /* Download Center */
     .download-controls {
-      background: #ffffff;
+      background: var(--bg-solid);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border-card);
       border-radius: var(--radius-md);
       padding: 18px;
@@ -742,7 +746,8 @@
       gap: 24px;
     }
     .hw-card {
-      background: #ffffff;
+      background: var(--bg-solid);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border-card);
       border-radius: var(--radius-lg);
       padding: 26px;
@@ -805,8 +810,8 @@
       text-align: right;
     }
     .hw-special-tag {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.8);
       border-radius: 8px;
       padding: 10px 12px;
       font-size: 0.82rem;
@@ -819,7 +824,8 @@
       overflow-x: auto;
       border-radius: var(--radius-md);
       border: 1px solid var(--border-card);
-      background: #ffffff;
+      background: var(--bg-solid);
+      backdrop-filter: blur(8px);
       box-shadow: var(--shadow-sm);
     }
     .compare-table {
@@ -829,7 +835,7 @@
       font-size: 0.92rem;
     }
     .compare-table th {
-      background: #f8fafc;
+      background: rgba(248, 250, 252, 0.7);
       padding: 14px 18px;
       font-weight: 700;
       color: var(--text-main);
@@ -844,7 +850,7 @@
       border-bottom: none;
     }
     .compare-table tr:hover td {
-      background: #fafafa;
+      background: rgba(255, 255, 255, 0.5);
     }
     .col-feature {
       font-weight: 700;
@@ -867,7 +873,8 @@
       gap: 20px;
     }
     .feature-card {
-      background: #ffffff;
+      background: var(--bg-solid);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border-card);
       border-radius: var(--radius-md);
       padding: 22px;
@@ -906,7 +913,8 @@
 
     /* Factory Defaults Quick Reference */
     .defaults-box {
-      background: #ffffff;
+      background: var(--bg-solid);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border-card);
       border-radius: var(--radius-lg);
       padding: 26px;
@@ -919,8 +927,9 @@
       margin-bottom: 24px;
     }
     .default-item {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(4px);
       border-radius: 12px;
       padding: 14px 16px;
       display: flex;
@@ -943,7 +952,7 @@
       justify-content: space-between;
     }
     .copy-btn {
-      background: #ffffff;
+      background: rgba(255, 255, 255, 0.85);
       border: 1px solid #cbd5e1;
       border-radius: 6px;
       padding: 4px 8px;
@@ -957,12 +966,12 @@
       gap: 4px;
     }
     .copy-btn:hover {
-      background: #f1f5f9;
+      background: #ffffff;
       color: var(--primary);
       border-color: var(--primary);
     }
     .defaults-tip-banner {
-      background: #eff6ff;
+      background: rgba(239, 246, 255, 0.8);
       border: 1px solid #bfdbfe;
       border-radius: 10px;
       padding: 14px 16px;
@@ -981,7 +990,8 @@
       margin-bottom: 24px;
     }
     .ci-step-card {
-      background: #ffffff;
+      background: var(--bg-solid);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border-card);
       border-radius: var(--radius-md);
       padding: 18px;
@@ -1020,7 +1030,8 @@
       gap: 16px;
     }
     .credit-card {
-      background: #ffffff;
+      background: var(--bg-solid);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border-card);
       border-radius: var(--radius-md);
       padding: 18px;
@@ -1115,9 +1126,9 @@
 
     /* Footer */
     footer {
-      background: rgba(255, 255, 255, 0.92);
-      backdrop-filter: blur(16px);
-      border-top: 1px solid rgba(226, 232, 240, 0.8);
+      background: rgba(255, 255, 255, 0.76);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid rgba(255, 255, 255, 0.6);
       padding: 40px 0;
       text-align: center;
       color: var(--text-muted);
@@ -1378,7 +1389,7 @@
         </div>
 
         <!-- Flashing Guide Accordion Box -->
-        <div style="margin-top: 24px; background: #ffffff; border: 1px solid var(--border-card); border-radius: var(--radius-md); padding: 18px;">
+        <div style="margin-top: 24px; background: var(--bg-solid); backdrop-filter: blur(8px); border: 1px solid var(--border-card); border-radius: var(--radius-md); padding: 18px;">
           <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             固件刷写与升级简明建议
@@ -1794,7 +1805,7 @@
           </div>
         </div>
 
-        <div style="background:#ffffff; border:1px solid var(--border-card); border-radius:var(--radius-md); padding:18px;">
+        <div style="background:var(--bg-solid); backdrop-filter:blur(8px); border:1px solid var(--border-card); border-radius:var(--radius-md); padding:18px;">
           <h4 style="font-size:0.95rem; font-weight:700; margin-bottom:10px;">云端流水线职责一览</h4>
           <div style="overflow-x:auto;">
             <table class="compare-table" style="font-size:0.85rem;">
@@ -2175,7 +2186,7 @@
 
       if (filtered.length === 0) {
         container.innerHTML = `
-          <div style="grid-column: 1/-1; background:#ffffff; border:1px solid #e2e8f0; border-radius:14px; padding:40px; text-align:center; color:var(--text-muted);">
+          <div style="grid-column: 1/-1; background:var(--bg-solid); backdrop-filter:blur(8px); border:1px solid var(--border-card); border-radius:14px; padding:40px; text-align:center; color:var(--text-muted);">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:10px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <p style="font-weight:700; font-size:1.1rem; color:var(--text-main);">未找到匹配的固件产物</p>
             <p style="font-size:0.88rem; margin-top:4px;">请尝试重置机型或版本筛选标签，或更换搜索关键词</p>
