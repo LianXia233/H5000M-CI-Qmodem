@@ -1,5 +1,54 @@
 # 更新日志
 
+## [2026-10-20] H5000M 新增 Modem Pro 统一模组方案配置（独立编译目标）
+
+### 背景
+
+为 Hiveton H5000M 增加一套与现有 QModem 配置并列、完全独立的编译目标，
+引入第三方模组管理栈 [LianXia233/modem-pro-unified](https://github.com/LianXia233/modem-pro-unified)
+（单一顶层包 `modem-pro`：Rust 守护进程 `modemd` 内置 QMI/MBIM 拨号 + netifd 协议
++ ucode/JS 世代 LuCI 前端）。该配置完全取消 QModem 模组管理：
+Next 现代前端、Classic 传统 LuCI 双配置，以及通用管理界面
+`luci-app-qmodem-generic` 均不编入。
+
+范围界定：仅 H5000M 新增，现有 `H5000M-qmodem-next` / `H5000M-qmodem` 两套
+配置保持不变，AP3000M 与 X86 维持现状（AP3000M 已于同日先行获得同类配置）。
+
+构建复用既有 modem-pro 通路：`WRT_VARIANT` 由配置名后缀 `-modem-pro` 推导，
+`sms`/`qmodem` 相关符号由 `Config/MODEM-PRO.txt` 统一禁用，Rust 后端走宿主
+rustup 直编（`MODEM_PRO_HOST_RUST=1`），跳过 feeds 的 rust/host 源码编译。
+
+自动构建策略：新配置仅加入 `WRT-BUILD` 手动可选列表，不纳入 `MTK-AUTO` 每日定时矩阵。
+
+### 改动
+
+- `Config/H5000M-modem-pro.txt`：新增。H5000M 机型配置（MT7986 filogic 平台、
+  `CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_hiveton_h5000m=y`、内核调整、
+  `luci-app-h5000m-fancontrol`），内容与 `Config/H5000M-qmodem.txt` 对齐；
+  模组方案差异全部由 `Config/MODEM-PRO.txt` 承载，不在此文件重复。
+- `.github/workflows/WRT-BUILD.yml`：手动入口 `options` 追加 `H5000M-modem-pro`
+  （置于 H5000M 两个 QModem 变体之后）。
+- `README.md`：Modem Pro 方案说明由「AP3000M 专属」改为 H5000M / AP3000M 双机型，
+  对比表增加机型覆盖行、明确取消 Next / 传统 LuCI 双前端，同步工作流说明与手动构建指引。
+- `CHANGELOG.md`：本条目。
+
+无需改动的部分（复用既有通路，已逐项核对）：
+
+- `.github/workflows/WRT-CORE.yml`：`*-modem-pro` 变体分支、`MODEM_PRO_HOST_RUST=1`
+  注入、「Seed Modem-Pro Config」「Setup Host Rust Toolchain」两步、`MODEM-PRO.txt`
+  变体文件选择均按后缀匹配，`H5000M-modem-pro` 直接命中；`H5000M-*` 机型名映射亦已存在。
+- `Scripts/Packages.sh`：`*-modem-pro` 门控拉取并注册 `modem_pro` 本地 feed 的逻辑不变。
+- `Scripts/Settings.sh` / `Scripts/Handles.sh`：WiFi7 参数与在线升级指纹均按
+  `*H5000M*` / `$WRT_CONFIG` 匹配，新配置自动获得 H5000M 专属默认值。
+- `index.html`：发布落地页按 tag 子串识别 `modem-pro` 变体与 `H5000M` 机型，
+  新 tag（`H5000M-modem-pro-...`）无需额外适配。
+
+### 验证
+
+- 新增配置文件为 UTF-8 + LF 行尾（`.gitattributes` 强制）。
+- `WRT-BUILD.yml` 通过 YAML 语法校验。
+- 端到端编译待手动 `workflow_dispatch` 触发 `WRT-BUILD` 选择 `H5000M-modem-pro` 完成。
+
 ## [2026-10-20] AP3000M 新增 Modem Pro 统一模组方案配置（独立编译目标）
 
 ### 背景

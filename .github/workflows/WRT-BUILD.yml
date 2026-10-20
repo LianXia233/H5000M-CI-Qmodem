@@ -17,6 +17,7 @@ on:
         options:
           - H5000M-qmodem-next
           - H5000M-qmodem
+          - H5000M-modem-pro
           - AP3000M-qmodem-next
           - AP3000M-qmodem
           - AP3000M-modem-pro
