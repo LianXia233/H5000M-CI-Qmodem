@@ -19,6 +19,7 @@ on:
           - H5000M-qmodem
           - AP3000M-qmodem-next
           - AP3000M-qmodem
+          - AP3000M-modem-pro
           - X86-qmodem-next
           - X86-qmodem
       SOURCE:

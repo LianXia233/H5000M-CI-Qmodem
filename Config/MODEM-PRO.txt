@@ -1,0 +1,27 @@
+# ===== modem-pro 统一模组管理（AP3000M 专属方案）=====
+# 单一包 modem-pro：Rust 守护进程 modemd（内置 QMI / MBIM 拨号）+ netifd 协议 + LuCI 前端。
+# 由 Scripts/Packages.sh 以本地 feed（src-link）注册；Rust 后端走宿主 rustup 直编
+# （MODEM_PRO_HOST_RUST），跳过 feeds 的 rust/host 源码编译。该开关必须在 feeds 包元数据
+# 扫描【之前】写入 .config，见 WRT-CORE.yml 的 Seed 步骤与 .config 注入。
+CONFIG_PACKAGE_modem-pro=y
+CONFIG_MODEM_PRO_HOST_RUST=y
+
+# ===== 取消 QModem 模组管理 =====
+# 本配置不再引入 QModem：Next 现代前端与 Classic 传统 LuCI 双配置、通用管理界面
+# luci-app-qmodem-generic，以及其依赖的模组控制组件（modem-pro 自带拨号与短信栈）。
+# 覆盖 GENERAL.txt 中默认启用的同名符号（.config 以最后写入值为准）。
+CONFIG_PACKAGE_qmodem=n
+CONFIG_PACKAGE_luci-app-qmodem=n
+CONFIG_PACKAGE_luci-app-qmodem-next=n
+CONFIG_PACKAGE_luci-i18n-qmodem-zh-cn=n
+CONFIG_PACKAGE_luci-app-qmodem-generic=n
+CONFIG_PACKAGE_sms-forwarder-next=n
+CONFIG_PACKAGE_ubus-at-daemon=n
+CONFIG_PACKAGE_sms-tool=n
+CONFIG_PACKAGE_sms-tool_q=n
+CONFIG_PACKAGE_quectel-CM-5G-M=n
+
+# USB HID / 串口特性门控：kmod-usb-serial-option 等内核模块在 Kconfig 中 depends on
+# PACKAGE_input-support，未启用时整条链被静默隐藏。modem-pro 依赖 USB 串口 AT 口，
+# 必须与既有 QModem 配置一样显式启用。
+CONFIG_PACKAGE_input-support=y

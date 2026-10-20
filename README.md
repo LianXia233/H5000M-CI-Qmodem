@@ -7,7 +7,7 @@
 [![ImmortalWrt Master](https://img.shields.io/badge/ImmortalWrt-master%20(Mainline)-brightgreen?logo=openwrt&logoColor=white)](#)
 [![MediaTek Filogic](https://img.shields.io/badge/Platform-MediaTek%20Filogic-orange)](#)
 [![x86_64](https://img.shields.io/badge/Platform-x86__64-informational)](#)
-[![QModem Next](https://img.shields.io/badge/Cellular-QModem%20Next%20%2F%20Classic-blueviolet)](#)
+[![Cellular Modem](https://img.shields.io/badge/Cellular-QModem%20%2F%20Modem%20Pro-blueviolet)](#)
 [![CI Build](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-blue?logo=githubactions&logoColor=white)](#)
 
 *全面支持 Hiveton H5000M (MT7986 + MT5700M)、AirPi AP3000M (MT7981B) 与通用 x86_64 平台*
@@ -20,6 +20,7 @@
 
 - ⚡ **纯正主线构建**：全系固件（H5000M / AP3000M / x86）均直接基于 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 官方主线 `master` 分支编译，拥抱最新内核与特性。
 - 📶 **QModem 双前端架构**：提供现代响应式 JavaScript（`*-qmodem-next`）与经典汉化 LuCI（`*-qmodem`）双版本，底层共享通用 QMI 驱动栈，互斥编译绝不冲突。
+- 🛰 **Modem Pro 统一模组方案（AP3000M 专属）**：额外提供 `AP3000M-modem-pro` 独立配置，引入 [modem-pro-unified](https://github.com/LianXia233/modem-pro-unified) 统一模组管理栈——Rust 守护进程 `modemd` 内置 QMI/MBIM 拨号，配套 ucode 世代 LuCI 前端，不依赖 QModem 组件的独立方案。
 - 🔄 **硬件级在线 OTA 升级**：深度定制 `luci-app-online-upgrade`，固件内置设备身份唯一特征锚点，自动匹配对应 Release，保留配置安全无缝直升。
 - 🛠️ **AP3000M 射频免驱修复**：采用开源 `mt76` 驱动栈，启动期自动写入 EEPROM 模板并绑定真实 MAC，彻底解决出厂 factory 分区丢失导致无 Wi-Fi 的痛点。
 - ❄️ **CPE 专属硬件控制**：集成双路温感风扇 PWM 阶梯调速、5G/有线链路状态监测与网络模式秒级切换。
@@ -41,9 +42,9 @@
 
 ## 🧩 核心功能与模组生态
 
-### 1. QModem 蜂窝模组双方案对比
+### 1. 蜂窝模组方案对比
 
-每个硬件机型均编译发布两套互相独立的配置，用户可按交互习惯自由选择：
+每个硬件机型均编译发布两套互相独立的 QModem 配置，用户可按交互习惯自由选择；AirPi AP3000M 另提供第三套独立的 Modem Pro 方案：
 
 | 对比维度 | `*-qmodem-next`（现代版） | `*-qmodem`（传统版） |
 | :--- | :--- | :--- |
@@ -53,8 +54,18 @@
 | **共用核心** | `qmodem` 核心引擎、`ubus-at-daemon`、`tom_modem`、`modem_scan` 与标准 QMI 通用驱动 | 同左 |
 | **互斥策略** | 显式锁定通用 `kmod-usb-net-qmi-wwan`，剔除冗余冲突驱动，两个前端绝不并存编入 | 同左 |
 
+**`AP3000M-modem-pro`（Modem Pro 统一版）** 为 AP3000M 专属的第三套独立配置，与上述两套 QModem 配置完全并列、互不干扰：
+
+| 对比维度 | `AP3000M-modem-pro` |
+| :--- | :--- |
+| **模组管理栈** | [modem-pro-unified](https://github.com/LianXia233/modem-pro-unified) 统一包，单一顶层包 `modem-pro` |
+| **拨号后端** | Rust 守护进程 `modemd`，内置 QMI / MBIM 拨号，经 netifd 协议接管 |
+| **前端形态** | ucode/JS 世代 LuCI 前端，由 `modemd` 提供 ubus 接口 |
+| **与 QModem 关系** | 完全取消 QModem 依赖（`qmodem` / `luci-app-qmodem-next` / `luci-app-qmodem` / `luci-app-qmodem-generic` 及其短信栈全部禁用） |
+| **Rust 构建** | 宿主 rustup 直编（`MODEM_PRO_HOST_RUST=1`），复用 CI 的 aarch64-musl 交叉工具链，跳过 feeds 的 rust/host 源码编译 |
+
 > [!TIP]
-> **使用建议**：若同时保留了 `luci-app-qmodem-generic` 通用管理界面，建议避免在两个界面中并发触发拨号或写入频段锁定的 AT 指令。
+> **使用建议**：在 QModem 配置中若同时保留了 `luci-app-qmodem-generic` 通用管理界面，建议避免在两个界面中并发触发拨号或写入频段锁定的 AT 指令。`AP3000M-modem-pro` 配置不包含 QModem 通用界面，不存在该并发冲突。
 
 ---
 
@@ -115,8 +126,8 @@
 
 | 编译工作流 | 触发模式 | 核心功能与职责 |
 | :--- | :--- | :--- |
-| **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自由选择机型、版本后缀（`-qmodem-next` 或 `-qmodem`）；支持 `TEST=true` 快速校验生成配置 |
-| **`MTK-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 MTK 架构设备（H5000M / AP3000M）的双版本固件 |
+| **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自由选择机型、版本后缀（`-qmodem-next`、`-qmodem` 或 AP3000M 专属的 `-modem-pro`）；支持 `TEST=true` 快速校验生成配置 |
+| **`MTK-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 MTK 架构设备（H5000M / AP3000M）的双版本固件（不含 AP3000M-modem-pro，该配置仅手动触发） |
 | **`OWRT-ALL`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 x86 平台的双版本固件 |
 | **`Auto-Clean`** | 每日 05:00 (CST) 定时 / 手动 | 定期清理历史制品（保留最新 1 份 Release）与 30 天以上的 Runs 日志 |
 | **`Cache-Clean`** | 每周定时 / 手动 | 回收 Actions 编译构建缓存，避免缓存陈旧 |
@@ -125,7 +136,7 @@
 
 1. 进入 GitHub 仓库主页，点击 **`Actions`** 选项卡。
 2. 在左侧列表定位到 **`WRT-BUILD`** 工作流，点击右侧 **`Run workflow`**。
-3. 选择对应的配置模板（如 `H5000M-qmodem-next` 或 `H5000M-qmodem`）。
+3. 选择对应的配置模板（如 `H5000M-qmodem-next`、`H5000M-qmodem`，或 AP3000M 专属的 `AP3000M-modem-pro`）。
 4. **测试开关说明**：
    - `TEST=true`（默认）：仅执行配置合并并导出 `.config` 检查语法，不执行实质编译。
    - `TEST=false`：执行全量编译并打包上传，自动在 Release 页面生成固件产物。
@@ -163,6 +174,7 @@ OpenWRT-CI-H5000M/
 │   ├── GENERAL.txt             # 全设备通用内核与基础功能包
 │   ├── QMODEM-NEXT.txt         # QModem Next 前端及依赖链
 │   ├── QMODEM.txt              # 传统 QModem 前端及依赖链
+│   ├── MODEM-PRO.txt           # Modem Pro 统一模组方案（AP3000M 专属，禁用 QModem）
 │   ├── H5000M-*.txt            # H5000M 机型配置定义
 │   └── AP3000M-*.txt           # AP3000M 机型配置定义
 ├── Scripts/                    # 流水线生命周期钩子
@@ -203,3 +215,7 @@ OpenWRT-CI-H5000M/
 
 * 👤 **蜂窝模组管理套件**：
 * [FUjr / QModem](https://github.com/FUjr/QModem?utm_source=gemini)（功能强大的蜂窝模组管理套件与 Next 现代界面生态）
+
+
+* 👤 **统一模组管理方案**：
+* [LianXia233 / modem-pro-unified](https://github.com/LianXia233/modem-pro-unified?utm_source=gemini)（Rust `modemd` 守护进程 + ucode/JS 前端的统一蜂窝模组管理栈，AP3000M 专属方案）

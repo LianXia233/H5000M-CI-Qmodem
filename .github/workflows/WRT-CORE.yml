@@ -128,6 +128,14 @@ jobs:
           echo "WRT_KVER=none" >> $GITHUB_ENV
           echo "WRT_LIST=none" >> $GITHUB_ENV
           case "$WRT_CONFIG" in
+            *-modem-pro)
+              # 模组方案：modem-pro（独立本地 feed，取代 QModem）。
+              # Rust 后端走宿主 rustup 直编：把开关注入后续所有步骤的环境
+              # （含 feeds 包元数据扫描阶段），避免扫描把 feeds 的 rust/host
+              # 记为 modem-pro 的构建依赖而触发 1~2 小时的 rustc + LLVM 源码编译。
+              echo "WRT_VARIANT=modem-pro" >> $GITHUB_ENV
+              echo "MODEM_PRO_HOST_RUST=1" >> $GITHUB_ENV
+              ;;
             *-qmodem)
               echo "WRT_VARIANT=qmodem" >> $GITHUB_ENV
               ;;
@@ -204,6 +212,22 @@ jobs:
           if [ -f "$PROJECT_MIRRORS_FILE" ]; then
             sed -i '/.cn\//d; /tencent/d; /aliyun/d' "$PROJECT_MIRRORS_FILE"
           fi
+
+      - name: Seed Modem-Pro Config (Before Feeds Scan)
+        # modem-pro 的 Rust 后端走宿主 rustup 直编（MODEM_PRO_HOST_RUST=1）。OpenWrt 的
+        # 包元数据扫描在 feeds 阶段就会跑（子 make 在每个包目录下 `make -r DUMP=1`），
+        # 它会读 .config 决定各包构建依赖，结果写进 tmp/.packageinfo 后被后续 make 复用
+        # （之后改 .config 不会触发重扫）。故必须在扫描【之前】把开关写进 .config，否则
+        # 扫描会把 feeds 的 rust/host 记成 modem-pro 的构建依赖，之后无论怎么设都会去源码
+        # 编译 rustc + LLVM（约 1~2 小时）。Custom Settings 阶段仍会再追加一次（同值不冲突）。
+        if: contains(env.WRT_CONFIG, 'modem-pro')
+        run: |
+          cd ./wrt/
+          {
+            echo "CONFIG_PACKAGE_modem-pro=y"
+            echo "CONFIG_MODEM_PRO_HOST_RUST=y"
+          } >> .config
+          echo "Seeded .config for modem-pro (host rustup direct build)"
 
       - name: Check Scripts
         run: |
@@ -312,13 +336,17 @@ jobs:
         run: |
           cd ./wrt/
 
+          # 按模组方案选择前端配置文件：
+          #   qmodem-next（默认）→ QMODEM-NEXT.txt；qmodem → QMODEM.txt；modem-pro → MODEM-PRO.txt
+          case "$WRT_VARIANT" in
+            qmodem)    VARIANT_FILE="$GITHUB_WORKSPACE/Config/QMODEM.txt" ;;
+            modem-pro) VARIANT_FILE="$GITHUB_WORKSPACE/Config/MODEM-PRO.txt" ;;
+            *)         VARIANT_FILE="$GITHUB_WORKSPACE/Config/QMODEM-NEXT.txt" ;;
+          esac
+
           if [[ "$WRT_TEST" == "true" ]]; then
-            VARIANT_FILE="$GITHUB_WORKSPACE/Config/QMODEM-NEXT.txt"
-            [[ "$WRT_VARIANT" == "qmodem" ]] && VARIANT_FILE="$GITHUB_WORKSPACE/Config/QMODEM.txt"
             cat "$WRT_CONFIG_FILE" "$VARIANT_FILE" >> .config
           else
-            VARIANT_FILE="$GITHUB_WORKSPACE/Config/QMODEM-NEXT.txt"
-            [[ "$WRT_VARIANT" == "qmodem" ]] && VARIANT_FILE="$GITHUB_WORKSPACE/Config/QMODEM.txt"
             cat "$WRT_CONFIG_FILE" "$GITHUB_WORKSPACE/Config/GENERAL.txt" "$VARIANT_FILE" >> .config
           fi
 
@@ -424,6 +452,23 @@ jobs:
             rm -rf "$PREBUILT_DIR"
           fi
 
+      - name: Setup Host Rust Toolchain (Modem-Pro)
+        # modem-pro 的 Rust 守护进程 modemd 由宿主 rustup 直编（MODEM_PRO_HOST_RUST=1）：
+        # 需要宿主 rustc + 官方 aarch64-unknown-linux-musl target，链接交给工具链自带的
+        # rust-lld（自包含静态 musl，无运行时 libc 依赖）。此步独立于 airpi 预编译步骤，
+        # 保证工具链无论如何都就绪，并把 cargo 目录写入 PATH 供后续编译步骤使用。
+        if: contains(env.WRT_CONFIG, 'modem-pro') && env.WRT_TEST != 'true'
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup target add aarch64-unknown-linux-musl
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          cargo --version
+          rustup target list --installed
+
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
         run: |
@@ -518,7 +563,7 @@ jobs:
           body: |
             ${{ env.WRT_MODEL }} 定制固件 · 基于 ImmortalWrt
 
-            QModem 配置：${{env.WRT_VARIANT}}
+            模组方案：${{env.WRT_VARIANT}}
 
             源码：${{env.WRT_REPO}}
             分支：${{env.WRT_BRANCH}}

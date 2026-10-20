@@ -622,6 +622,11 @@
       color: #2563eb;
       border: 1px solid #bfdbfe;
     }
+    .badge-modem-pro {
+      background: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+    }
 
     .release-meta {
       font-size: 0.82rem;
@@ -1416,6 +1421,7 @@
                 <button class="tab-pill active" onclick="filterVariant('all', this)">全部</button>
                 <button class="tab-pill" onclick="filterVariant('next', this)">QModem Next (现代 JS)</button>
                 <button class="tab-pill" onclick="filterVariant('classic', this)">QModem (传统 LuCI)</button>
+                <button class="tab-pill" onclick="filterVariant('modem-pro', this)">Modem Pro 统一版</button>
               </div>
             </div>
 
@@ -1992,7 +1998,7 @@
     // --- State Management ---
     let currentMirror = 'acg2'; // Default: gh.acg2.mom fast mirror
     let currentDeviceFilter = 'all'; // 'all', 'H5000M', 'AP3000M', 'X86'
-    let currentVariantFilter = 'all'; // 'all', 'next', 'classic'
+    let currentVariantFilter = 'all'; // 'all', 'next', 'classic', 'modem-pro'
     let searchQuery = '';
 
     // --- Embedded Verified Fallback Releases (Matches latest actual repository build) ---
@@ -2237,10 +2243,12 @@
       }
 
       container.innerHTML = filtered.map((rel, index) => {
-        const isNext = rel.variant === 'next';
-        const variantBadge = isNext 
-          ? '<span class="release-frontend-badge badge-next">⚡ QModem Next (现代版)</span>' 
-          : '<span class="release-frontend-badge badge-classic">🏮 QModem (传统版)</span>';
+        const variantBadgeMap = {
+          'next': '<span class="release-frontend-badge badge-next">⚡ QModem Next (现代版)</span>',
+          'classic': '<span class="release-frontend-badge badge-classic">🏮 QModem (传统版)</span>',
+          'modem-pro': '<span class="release-frontend-badge badge-modem-pro">🛰 Modem Pro (统一版)</span>'
+        };
+        const variantBadge = variantBadgeMap[rel.variant] || variantBadgeMap['classic'];
         
         const primaryUrl = rel.primary_asset ? transformUrl(rel.primary_asset.download_url) : '#';
         const primarySize = rel.primary_asset ? formatBytes(rel.primary_asset.size) : '';
@@ -2362,8 +2370,10 @@
             if (tag.startsWith('AP3000M')) dev = 'AP3000M';
             else if (tag.startsWith('X86') || tag.startsWith('x86')) dev = 'X86';
 
-            const isNext = tag.includes('qmodem-next');
-            const variant = isNext ? 'next' : 'classic';
+            let variant = 'classic';
+            if (tag.includes('modem-pro')) variant = 'modem-pro';
+            else if (tag.includes('qmodem-next')) variant = 'next';
+            const variantLabel = variant === 'modem-pro' ? 'Modem Pro 统一版' : (variant === 'next' ? 'QModem Next' : '经典 LuCI');
 
             let primary = null;
             const extras = [];
@@ -2410,10 +2420,10 @@
               device: dev,
               variant: variant,
               description: dev === 'H5000M' 
-                ? `Hiveton H5000M 5G CPE · ${isNext ? 'QModem Next 现代化' : '经典 LuCI'} 前端 · Wi-Fi 7 (160MHz) · 双温感风扇调速`
+                ? `Hiveton H5000M 5G CPE · ${variantLabel} 前端 · Wi-Fi 7 (160MHz) · 双温感风扇调速`
                 : (dev === 'AP3000M' 
-                    ? `AirPi AP3000M · Wi-Fi 6 (160MHz) · ${isNext ? 'QModem Next' : '传统 LuCI'} · 开机自动写入 EEPROM 校准修复`
-                    : `x86_64 通用架构 · ${isNext ? 'QModem Next' : '经典 LuCI'} · 支持 UEFI / BIOS / VMware / ISO`),
+                    ? `AirPi AP3000M · Wi-Fi 6 (160MHz) · ${variantLabel} · 开机自动写入 EEPROM 校准修复`
+                    : `x86_64 通用架构 · ${variantLabel} · 支持 UEFI / BIOS / VMware / ISO`),
               primary_asset: primary,
               extra_assets: extras
             });

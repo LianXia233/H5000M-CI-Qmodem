@@ -1,5 +1,55 @@
 # 更新日志
 
+## [2026-10-20] AP3000M 新增 Modem Pro 统一模组方案配置（独立编译目标）
+
+### 背景
+
+为 AirPi AP3000M 增加一套与现有 QModem 配置并列、完全独立的编译目标，
+引入第三方模组管理栈 [LianXia233/modem-pro-unified](https://github.com/LianXia233/modem-pro-unified)
+（单一顶层包 `modem-pro`：Rust 守护进程 `modemd` 内置 QMI/MBIM 拨号 + netifd 协议
++ ucode/JS 世代 LuCI 前端）。该配置完全取消 QModem 模组管理：
+Next 现代前端、Classic 传统 LuCI 双配置，以及通用管理界面
+`luci-app-qmodem-generic` 均不编入。
+
+范围界定：仅 AP3000M 新增，现有 `AP3000M-qmodem-next` / `AP3000M-qmodem` 两套
+配置保持不变，H5000M 与 X86 维持 QModem 现状。
+
+Rust 后端构建路径：采用宿主 rustup 直编（`MODEM_PRO_HOST_RUST=1`），复用 CI 已为
+AP3000M 准备的 rustup + `aarch64-unknown-linux-musl` 工具链交叉编译，跳过 feeds 的
+rust/host 源码编译（否则会触发 1~2 小时 rustc + LLVM 源码编译）。
+
+自动构建策略：新配置仅加入 `WRT-BUILD` 手动可选列表，不纳入 `MTK-AUTO` 每日定时矩阵。
+
+### 改动
+
+- `Config/MODEM-PRO.txt`：新增。启用 `modem-pro` 与 `MODEM_PRO_HOST_RUST`，
+  显式禁用 QModem 全套组件（`qmodem` / `luci-app-qmodem-next` / `luci-app-qmodem` /
+  `luci-i18n-qmodem-zh-cn` / `luci-app-qmodem-generic` / 短信栈），并门控启用
+  `input-support`（USB 串口内核模块依赖链）。
+- `Config/AP3000M-modem-pro.txt`：新增。AP3000M 机型配置（MT7981B 平台、WiFi 驱动、
+  风扇控制），并修正游离的 `kmt7981-firmware=n` 行与现有 AP3000M 配置对齐。
+- `Scripts/Packages.sh`：仅在 `*-modem-pro` 配置时拉取 modem-pro-unified 并整理为
+  规范 feed 结构（feed 根 `../modem-pro-feed` 下放 `modem-pro/` 子目录），
+  以 `src-link modem_pro` 注册，避免 `scan.mk` 路径截断与 core package 冲突。
+- `.github/workflows/WRT-CORE.yml`：
+  - 变体识别新增 `*-modem-pro` 分支，注入 `WRT_VARIANT=modem-pro` 与
+    `MODEM_PRO_HOST_RUST=1`；
+  - 新增「Seed Modem-Pro Config (Before Feeds Scan)」步骤，在 feeds 包元数据扫描
+    **之前**写入 `.config` 开关，避免扫描误把 feeds 的 rust/host 记为构建依赖；
+  - 新增「Setup Host Rust Toolchain (Modem-Pro)」步骤，安装 rustup 与
+    `aarch64-unknown-linux-musl` target；
+  - 变体文件选择逻辑：`modem-pro → MODEM-PRO.txt`。
+- `.github/workflows/WRT-BUILD.yml`：手动入口 `options` 追加 `AP3000M-modem-pro`。
+- `index.html`：发布落地页新增 `modem-pro` 变体筛选按钮、`badge-modem-pro` 徽章样式、
+  tag 解析（`modem-pro` → 统一版）与描述文案分支。
+- `README.md` / `CHANGELOG.md`：同步文档。
+
+### 验证
+
+- 全部新增/改动配置文件均为 LF 行尾（`.gitattributes` 已强制）。
+- `WRT-CORE.yml` / `WRT-BUILD.yml` 通过 YAML 语法校验；`Packages.sh` 通过 shell 语法校验。
+- 端到端编译待手动 `workflow_dispatch` 触发 `WRT-BUILD` 选择 `AP3000M-modem-pro` 完成。
+
 ## [2026-10-18] miniupnpd 2.3.11 修复独立复验：补丁链整链通过（含 900 补丁）
 
 ### 背景

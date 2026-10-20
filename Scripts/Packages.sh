@@ -133,6 +133,51 @@ FIX_QMODEM_VERSION() {
 }
 FIX_QMODEM_VERSION
 
+# ===== modem-pro-unified：单一包 modem-pro（AP3000M 专属，替代 QModem 模组管理）=====
+# 仓库顶层即唯一 Makefile，包位于 feed 根目录。但 OpenWrt 的 scripts/feeds 扫描要求包
+# Makefile 位于 feed 的【子目录】下（feed_dir/<pkg>/Makefile）——直接用 src-link 指向
+# 仓库根时，scan.mk 的路径截断逻辑会把 `call BuildPackage` 的 grep 输出误当包路径，
+# 报 "target pattern contains no '%'"，install 阶段也找不到包（No feed for package）。
+# 故先把克隆目录整理成一个规范 feed：feed 根 ../modem-pro-feed 下放 modem-pro/ 子目录，
+# 再以 src-link 注册（feed 名只允许 [A-Za-z0-9_]，故用 modem_pro）。
+# 仅 *-modem-pro 配置引入：其余机型继续使用 QModem，无需拉取（省一次克隆与包扫描）。
+if [[ "${WRT_CONFIG:-}" == *modem-pro ]]; then
+	UPDATE_PACKAGE "modem-pro-unified" "LianXia233/modem-pro-unified" "main"
+
+	MODEM_PRO_SRC="./modem-pro-unified"
+	if [ -d "$MODEM_PRO_SRC" ]; then
+		# 仅复制构建必需项；真实复制（禁止 symlink —— symlink 同样会触发上述扫描 bug）
+		MODEM_PRO_FEED="../modem-pro-feed"
+		rm -rf "$MODEM_PRO_FEED"
+		mkdir -p "$MODEM_PRO_FEED/modem-pro"
+		for ITEM in Makefile VERSION rust luci files packaging; do
+			[ -e "$MODEM_PRO_SRC/$ITEM" ] && cp -r "$MODEM_PRO_SRC/$ITEM" "$MODEM_PRO_FEED/modem-pro/$ITEM"
+		done
+		# 克隆目录必须移出 package/：否则 package/ 主扫描会提前命中仓库根 Makefile，
+		# 把 modem-pro 注册为 core package，feeds install 时 "Not overriding core package"
+		# 直接跳过链接，配置符号在 defconfig 阶段又被静默丢弃。
+		rm -rf "$MODEM_PRO_SRC"
+		# 清掉可能混入的 Rust 构建产物（体积大且会污染 feed 索引）
+		find "$MODEM_PRO_FEED/modem-pro" -name target -type d -prune -exec rm -rf {} + 2>/dev/null
+
+		MODEM_PRO_FEEDS_CONF="../feeds.conf"
+		[ -f "$MODEM_PRO_FEEDS_CONF" ] || MODEM_PRO_FEEDS_CONF="../feeds.conf.default"
+
+		MODEM_PRO_ABS="$(cd "$MODEM_PRO_FEED" && pwd)"
+		if ! grep -q "^src-link modem_pro " "$MODEM_PRO_FEEDS_CONF" 2>/dev/null; then
+			echo "src-link modem_pro $MODEM_PRO_ABS" >> "$MODEM_PRO_FEEDS_CONF"
+		fi
+
+		if ( cd .. && ./scripts/feeds update modem_pro && ./scripts/feeds install -a -p modem_pro ); then
+			echo "modem-pro: 已注册为本地 feed 并安装到 package/feeds/modem_pro/"
+		else
+			echo "modem-pro: feed 注册失败，固件将不含 modem-pro 包"
+		fi
+	else
+		echo "modem-pro: 克隆目录不存在，跳过 feed 注册"
+	fi
+fi
+
 # 注：上游曾把 +qmodem-sipd 追加进 sms-forwarder-next 的 DEPENDS，与 ttyd 的
 # libwebsockets-full 互斥导致 -next 变体 rootfs 组装失败；上游现已将其降级为
 # PKG_RECOMMENDS（apk rootfs 组装不安装 RECOMMENDS，NEXT manifest 无 qmodem-sipd），

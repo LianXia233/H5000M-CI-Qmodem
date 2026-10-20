@@ -1,0 +1,29 @@
+# 设备平台
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+
+# 仅编译 AirPi AP3000M
+CONFIG_TARGET_MULTI_PROFILE=n
+CONFIG_TARGET_ALL_PROFILES=n
+CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_airpi_ap3000m=y
+
+# 内核调整
+CONFIG_PACKAGE_kmod-cryptodev=y
+CONFIG_PACKAGE_kmod-tls=y
+
+# AP3000M WiFi 驱动及固件
+CONFIG_PACKAGE_kmod-mt7915e=y
+CONFIG_PACKAGE_kmod-mt7981-firmware=y
+CONFIG_PACKAGE_mt7981-wo-firmware=y
+# WiFi 运行时与 LuCI 无线管理界面
+CONFIG_PACKAGE_wpad-basic-mbedtls=y
+CONFIG_PACKAGE_wireless-regdb=y
+CONFIG_PACKAGE_iwinfo=y
+CONFIG_PACKAGE_luci-mod-network=y
+
+# AP3000M 专用硬件 (风扇控制)
+CONFIG_PACKAGE_luci-app-airpi-fancontrol=y
+CONFIG_PACKAGE_kmod-airpi-gpio-fan=y
+# luci-compat / luci-lua-runtime 已移除：风扇插件 v4.0 起为纯 JS 实现（仅依赖 luci-base），
+# 这两个遗留 Lua 兼容层无人使用，在新版 immortalwrt 中也不存在，保留只会额外编译一整套 Lua 依赖
+CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
