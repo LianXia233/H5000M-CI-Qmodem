@@ -24,19 +24,14 @@ on:
           - X86-qmodem-next
           - X86-qmodem
       SOURCE:
-        description: '源码仓库'
+        description: '源码仓库（分支按仓库自动匹配，无需手动选择）'
         default: 'immortalwrt/immortalwrt'
         required: true
         type: choice
         options:
-          - VIKINGYFY/immortalwrt
           - immortalwrt/immortalwrt
+          - VIKINGYFY/immortalwrt
           - chasey-dev/immortalwrt-mt798x-rebase
-      BRANCH:
-        description: '源码分支（VIKINGYFY 用 main / owrt，immortalwrt 用 master，chasey-dev 用 25.12）'
-        default: 'master'
-        required: true
-        type: string
       PACKAGE:
         description: '手动调整插件包，多个请用换行隔开'
         required: false
@@ -52,8 +47,45 @@ permissions: write-all
 
 # CI 任务
 jobs:
+  # 按所选源码仓库（结合目标机型）自动推导分支，避免仓库与分支手动组合出错
+  resolve:
+    name: Resolve Branch
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.branch.outputs.branch }}
+    steps:
+      - name: Resolve Source Branch
+        id: branch
+        env:
+          SOURCE: ${{ inputs.SOURCE }}
+          CONFIG: ${{ inputs.CONFIG }}
+        run: |
+          case "$SOURCE" in
+            immortalwrt/immortalwrt)
+              BRANCH=master
+              ;;
+            chasey-dev/immortalwrt-mt798x-rebase)
+              BRANCH=25.12
+              ;;
+            VIKINGYFY/immortalwrt)
+              # 该仓库同时提供 main 与 owrt：MTK 机型走 owrt，其余平台走 main
+              case "$CONFIG" in
+                H5000M-*|AP3000M-*) BRANCH=owrt ;;
+                *)                  BRANCH=main ;;
+              esac
+              ;;
+            *)
+              echo "::error title=Unsupported source::未知源码仓库 '$SOURCE'"
+              exit 1
+              ;;
+          esac
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "源码：$SOURCE @ $BRANCH" >> "$GITHUB_STEP_SUMMARY"
+
   config:
     name: ${{ inputs.CONFIG }}
+    needs: resolve
     # 调用公用编译核心 WRT-CORE.yml
     uses: ./.github/workflows/WRT-CORE.yml
     with:
@@ -61,8 +93,8 @@ jobs:
       WRT_CONFIG: ${{ inputs.CONFIG }}
       # 源码链接
       WRT_REPO: https://github.com/${{ inputs.SOURCE }}.git
-      # 源码分支
-      WRT_BRANCH: ${{ inputs.BRANCH }}
+      # 源码分支（由 resolve 任务按仓库与机型自动推导）
+      WRT_BRANCH: ${{ needs.resolve.outputs.branch }}
       # 源码名称
       WRT_SOURCE: ${{ inputs.SOURCE }}
       # 插件调整

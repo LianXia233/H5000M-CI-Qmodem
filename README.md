@@ -18,7 +18,7 @@
 
 ## 📌 核心特性亮点
 
-- ⚡ **纯正主线构建**：全系固件（H5000M / AP3000M / x86）均直接基于 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 官方主线 `master` 分支编译，拥抱最新内核与特性。
+- ⚡ **纯正主线构建**：QModem 全系配置（H5000M / AP3000M / x86）直接基于 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 官方主线 `master` 分支编译；两套 Modem Pro 配置则基于 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支编译，拥抱最新内核与特性。
 - 📶 **QModem 双前端架构**：提供现代响应式 JavaScript（`*-qmodem-next`）与经典汉化 LuCI（`*-qmodem`）双版本，底层共享通用 QMI 驱动栈，互斥编译绝不冲突。
 - 🛰 **Modem Pro 统一模组方案（H5000M / AP3000M）**：额外提供 `H5000M-modem-pro` 与 `AP3000M-modem-pro` 独立配置，引入 [modem-pro-unified](https://github.com/LianXia233/modem-pro-unified) 统一模组管理栈——Rust 守护进程 `modemd` 内置 QMI/MBIM 拨号，配套 ucode 世代 LuCI 前端；该配置完全不编入 QModem（Next 现代前端、传统 LuCI 双配置与通用管理界面全部取消）。
 - 🔄 **硬件级在线 OTA 升级**：深度定制 `luci-app-online-upgrade`，固件内置设备身份唯一特征锚点，自动匹配对应 Release，保留配置安全无缝直升。
@@ -31,8 +31,8 @@
 
 | 目标机型 | 平台架构 / SoC | 硬件形态与特性 | Wi-Fi 驱动栈 | 源码上游 / 分支 |
 | :--- | :--- | :--- | :---: | :--- |
-| **`H5000M`** | MediaTek Filogic (MT7986) | Hiveton H5000M 5G CPE（鼎桥 MT5700M） | ✅ 开启 | `immortalwrt/immortalwrt` (`master`) |
-| **`AP3000M`** | MediaTek Filogic (MT7981B) | AirPi AP3000M Wi-Fi 6 路由器 | ✅ 开启（开源 mt76） | `immortalwrt/immortalwrt` (`master`) |
+| **`H5000M`** | MediaTek Filogic (MT7986) | Hiveton H5000M 5G CPE（鼎桥 MT5700M） | ✅ 开启 | `immortalwrt/immortalwrt` (`master`)；Modem Pro 用 `VIKINGYFY/immortalwrt` (`owrt`) |
+| **`AP3000M`** | MediaTek Filogic (MT7981B) | AirPi AP3000M Wi-Fi 6 路由器 | ✅ 开启（开源 mt76） | `immortalwrt/immortalwrt` (`master`)；Modem Pro 用 `VIKINGYFY/immortalwrt` (`owrt`) |
 | **`X86`** | x86_64 通用架构 | 工控机 / 软路由 / 物理 PC / 虚拟机 | — | `immortalwrt/immortalwrt` (`master`) |
 
 > [!NOTE]
@@ -59,6 +59,7 @@
 | 对比维度 | `*-modem-pro` |
 | :--- | :--- |
 | **机型覆盖** | `H5000M-modem-pro`（MT7986 + MT5700M）、`AP3000M-modem-pro`（MT7981B） |
+| **源码基线** | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支（QModem 配置仍使用 `immortalwrt/immortalwrt` 的 `master`） |
 | **模组管理栈** | [modem-pro-unified](https://github.com/LianXia233/modem-pro-unified) 统一包，单一顶层包 `modem-pro` |
 | **拨号后端** | Rust 守护进程 `modemd`，内置 QMI / MBIM 拨号，经 netifd 协议接管 |
 | **前端形态** | ucode/JS 世代 LuCI 前端，由 `modemd` 提供 ubus 接口 |
@@ -130,8 +131,8 @@
 
 | 编译工作流 | 触发模式 | 核心功能与职责 |
 | :--- | :--- | :--- |
-| **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自由选择机型、版本后缀（`-qmodem-next`、`-qmodem`，或 H5000M / AP3000M 的 `-modem-pro`）；支持 `TEST=true` 快速校验生成配置 |
-| **`MTK-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 MTK 架构设备（H5000M / AP3000M）的三版本固件，每款机型均包含 `-qmodem-next`、`-qmodem` 与 `-modem-pro` |
+| **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自由选择机型、版本后缀（`-qmodem-next`、`-qmodem`，或 H5000M / AP3000M 的 `-modem-pro`）；源码仓库选定后分支自动匹配（`immortalwrt` → `master`、`VIKINGYFY` → MTK 机型 `owrt` / 其他 `main`、`chasey-dev` → `25.12`），无需手动填写；支持 `TEST=true` 快速校验生成配置 |
+| **`MTK-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 MTK 架构设备（H5000M / AP3000M）的三版本固件，每款机型均包含 `-qmodem-next`、`-qmodem` 与 `-modem-pro`；两套 Modem Pro 使用 `VIKINGYFY/immortalwrt` 的 `owrt` 分支 |
 | **`OWRT-ALL`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 x86 平台的双版本固件 |
 | **`Auto-Clean`** | 每日 05:00 (CST) 定时 / 手动 | 定期清理历史制品（保留最新 1 份 Release）与 30 天以上的 Runs 日志 |
 | **`Cache-Clean`** | 每周定时 / 手动 | 回收 Actions 编译构建缓存，避免缓存陈旧 |
@@ -141,7 +142,8 @@
 1. 进入 GitHub 仓库主页，点击 **`Actions`** 选项卡。
 2. 在左侧列表定位到 **`WRT-BUILD`** 工作流，点击右侧 **`Run workflow`**。
 3. 选择对应的配置模板（如 `H5000M-qmodem-next`、`H5000M-qmodem`，或 Modem Pro 统一版的 `H5000M-modem-pro` / `AP3000M-modem-pro`）。
-4. **测试开关说明**：
+4. 如需更换编译源码，只需在 **`SOURCE`** 中选择仓库，分支由流水线自动匹配（`immortalwrt` → `master`、`VIKINGYFY` → MTK 机型 `owrt` / 其他 `main`、`chasey-dev` → `25.12`），无需手动填写；运行摘要中会显示最终使用的仓库与分支。
+5. **测试开关说明**：
    - `TEST=true`（默认）：仅执行配置合并并导出 `.config` 检查语法，不执行实质编译。
    - `TEST=false`：执行全量编译并打包上传，自动在 Release 页面生成固件产物。
 

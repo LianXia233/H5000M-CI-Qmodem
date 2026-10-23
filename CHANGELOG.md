@@ -1,5 +1,43 @@
 # 更新日志
 
+## [2026-10-23] Modem Pro 源码切换至 VIKINGYFY owrt，WRT-BUILD 分支自动匹配
+
+### 背景
+
+按方案区分源码基线：两套 Modem Pro 配置改用 `VIKINGYFY/immortalwrt` 的 `owrt`
+分支构建，QModem 配置继续使用 `immortalwrt/immortalwrt` 的 `master`。
+同时 `WRT-BUILD` 原先需手动填写 `BRANCH`，容易选错（如 `immortalwrt` + `owrt`），
+改为选定源码仓库后由流水线自动匹配分支。
+
+### 改动
+
+- `.github/workflows/MTK-AUTO.yml`：`H5000M-modem-pro` / `AP3000M-modem-pro` 的
+  `SOURCE` / `BRANCH` 改为 `VIKINGYFY/immortalwrt` + `owrt`；QModem 四个 job 不变。
+- `.github/workflows/WRT-BUILD.yml`：移除手动 `BRANCH` 输入，新增 `resolve` 任务，
+  按 `SOURCE`（并结合 `CONFIG`）推导分支：
+  - `immortalwrt/immortalwrt` → `master`
+  - `chasey-dev/immortalwrt-mt798x-rebase` → `25.12`
+  - `VIKINGYFY/immortalwrt` → H5000M / AP3000M 用 `owrt`，其余平台用 `main`
+
+  解析结果经 `needs.resolve.outputs.branch` 传给 `WRT-CORE`，并写入运行摘要。
+- `README.md`：源码矩阵、Modem Pro 对比表、工作流一览与手动构建步骤同步。
+- `index.html`：硬件矩阵、方案说明与流水线职责表同步。
+- `CHANGELOG.md`：本条目。
+
+### 说明
+
+- GitHub Actions 的 `workflow_dispatch` 不支持「仓库 → 分支」联动下拉，故由 `resolve`
+  任务在运行开始时自动推导；UI 上已移除分支字段，避免手动误选。
+- Release / tag 的源码标识随之变为 `VIKINGYFY-owrt`（如
+  `H5000M-modem-pro-VIKINGYFY-owrt-<日期>`）；落地页按 tag 前缀与子串解析，无需适配。
+- 工具链缓存键包含源码名与分支，Modem Pro 将使用
+  `wrt-tc-...-VIKINGYFY-owrt-...` 命名空间，首次定时构建为冷编译。
+
+### 验证
+
+- `MTK-AUTO` / `WRT-BUILD` / `WRT-CORE` 均通过 YAML 解析校验。
+- 端到端确认待下一次定时构建或 `WRT-BUILD` 手动触发。
+
 ## [2026-10-23] Modem Pro 纳入 MTK-AUTO 每日自动编译
 
 ### 背景

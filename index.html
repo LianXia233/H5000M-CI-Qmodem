@@ -1567,7 +1567,7 @@
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
               硬件支持与平台架构矩阵
             </h2>
-            <p class="section-desc">三大主力硬件形态全量采用 ImmortalWrt 官方主线 Master 分支编译，内核架构纯正精悍</p>
+            <p class="section-desc">QModem 配置基于 ImmortalWrt 官方主线 Master 分支编译；H5000M / AP3000M 的 Modem Pro 统一版则基于 VIKINGYFY/immortalwrt 的 owrt 分支</p>
           </div>
         </div>
 
@@ -1635,7 +1635,7 @@
               </li>
               <li class="hw-spec-item">
                 <span class="hw-spec-label">源码来源</span>
-                <span class="hw-spec-val">ImmortalWrt Master 主线</span>
+                <span class="hw-spec-val">ImmortalWrt Master 主线<br>Modem Pro：VIKINGYFY owrt</span>
               </li>
             </ul>
 
@@ -1974,12 +1974,12 @@
                 <tr>
                   <td><strong><code>WRT-BUILD</code></strong></td>
                   <td>手动 <code>workflow_dispatch</code></td>
-                  <td>自定义按需编译。可自由切换机型与版本；<code>TEST=true</code> 仅语法检查，<code>TEST=false</code> 实质编译</td>
+                  <td>自定义按需编译。可自由切换机型、版本与源码仓库，分支按仓库自动匹配（无需手填）；<code>TEST=true</code> 仅语法检查，<code>TEST=false</code> 实质编译</td>
                 </tr>
                 <tr>
                   <td><strong><code>MTK-AUTO</code></strong></td>
                   <td>每日定时 / 手动</td>
-                  <td>全自动拉取主线源码，并行构建发布 H5000M 与 AP3000M 的三版本固件（QModem Next / QModem / Modem Pro）</td>
+                  <td>全自动拉取源码，并行构建发布 H5000M 与 AP3000M 的三版本固件（QModem Next / QModem / Modem Pro，Modem Pro 基于 VIKINGYFY owrt）</td>
                 </tr>
                 <tr>
                   <td><strong><code>OWRT-ALL</code></strong></td>

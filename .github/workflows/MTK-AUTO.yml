@@ -28,6 +28,7 @@ jobs:
       matrix:
         include:
           # 每款 MTK 机型三套变体：QModem Next / QModem 传统版 / Modem Pro 统一版
+          # Modem Pro 两套使用 VIKINGYFY/immortalwrt 的 owrt 分支，其余使用 immortalwrt/master
           - CONFIG: H5000M-qmodem-next
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
@@ -35,8 +36,8 @@ jobs:
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
           - CONFIG: H5000M-modem-pro
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
           - CONFIG: AP3000M-qmodem-next
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
@@ -44,8 +45,8 @@ jobs:
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
           - CONFIG: AP3000M-modem-pro
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:
