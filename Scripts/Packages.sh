@@ -57,7 +57,7 @@ UPDATE_PACKAGE() {
 	elif [[ "$PKG_SPECIAL" == "name" ]]; then
 		mv -f "$REPO_NAME" "$PKG_NAME"
 	elif [[ "$PKG_SPECIAL" == "all" ]]; then
-		find "./$REPO_NAME/" -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./\;
+		find "./$REPO_NAME/" -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ +
 		rm -rf "./$REPO_NAME/"
 	fi
 }
@@ -244,7 +244,7 @@ UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-bo
 # VIKINGYFY/packages 的 sing-box 自带 patches/100-fix-dns-tcp-close.patch，它是针对
 # 旧版 sing-box 的反向移植（引入上游从未合入的 HandleStreamDNSConnection）。当 feed 把
 # sing-box 升到 1.15.0_alpha8 后，该补丁上下文已与上游源码（仍是 HandleStreamDNSRequest）
-# 不匹配，OpenWrt 在 Build/Prepare 阶段应用补丁报 “Patch failed!” 并 Error 1，
+# 不匹配，OpenWrt 在 Build/Prepare 阶段应用补丁报 "Patch failed!" 并 Error 1，
 # 进而令整个固件编译中断（今日 MTK-AUTO 与 OWRT-ALL 两个定时构建同时失败即此因）。
 # 上游 immortalwrt/packages 的 sing-box 根本不携带该补丁也能正常构建，故这里在补丁确为
 # 旧版（内容含 HandleStreamDNSConnection）时移除它，恢复构建。若 VIKINGYFY 后续刷新该补丁
@@ -279,11 +279,11 @@ UPDATE_PACKAGE "luci-app-h5000m-netmode" "LianXia233/luci-app-h5000m-netmode" "m
 # 该插件后端已重写为 Rust crate，仓库里保留 src/（Rust 源码），并把预编译的静态 ELF
 # 直接随包发布在 root/usr/sbin 下（见插件 Makefile 顶部注释：buildroot 内没有 Rust 工具链）。
 # 但 feeds/luci/luci.mk 的两个分支判断条件并不一致：
-#   Build/Compile      按 $(wildcard ${CURDIR}/src/Makefile) 判断 —— 需要“有 Makefile”
-#   Package/.../install 按 $(wildcard ${CURDIR}/src)        判断 —— 只要“目录存在”即可
-# 于是 “有 src/ 但没有 src/Makefile” 这个组合会踩坑：Compile 被跳过、ipkg-install 目录
+#   Build/Compile      按 $(wildcard ${CURDIR}/src/Makefile) 判断 —— 需要"有 Makefile"
+#   Package/.../install 按 $(wildcard ${CURDIR}/src)        判断 —— 只要"目录存在"即可
+# 于是 "有 src/ 但没有 src/Makefile" 这个组合会踩坑：Compile 被跳过、ipkg-install 目录
 # 永远不会生成，install 阶段却仍执行 Build/Install/Default，即 make -C $(PKG_BUILD_DIR) install；
-# 该目录顶层没有 Makefile，make 报 “No rule to make target 'install'” 并以 exit code 2 退出，
+# 该目录顶层没有 Makefile，make 报 "No rule to make target 'install'" 并以 exit code 2 退出，
 # 表现为 luci.mk 末尾 BuildPackage 展开的打包规则报错（luci.mk:408），进而整个 world 编译中断。
 # 证据链：src/ 由插件 2026-09-28 的 c68ac211（rewrite backend as single static Rust ELF）引入，
 # 9-27 的 CI #99 仍成功，9-29 的 #100 是首个带 src/ 的构建，4 个 job 报错行与退出码完全一致。
