@@ -9,7 +9,9 @@ CONFIG_MODEM_PRO_HOST_RUST=y
 # ===== 取消 QModem 模组管理 =====
 # 本配置不再引入 QModem：Next 现代前端与 Classic 传统 LuCI 双配置、通用管理界面
 # luci-app-qmodem-generic，以及其依赖的模组控制组件（modem-pro 自带拨号与短信栈）。
-# 覆盖 GENERAL.txt 中默认启用的同名符号（.config 以最后写入值为准）。
+# Scripts/Packages.sh 会按 WRT_CONFIG 在源头跳过 QModem 仓库克隆与 feed 注册，
+# 因此 modemd 构建环境中不存在 qmodem / qmodem-smsd / sms-forwarder-next 等包；
+# 下面仍显式写 n，作为配置层第二道保险（.config 以最后写入值为准）。
 CONFIG_PACKAGE_qmodem=n
 CONFIG_PACKAGE_luci-app-qmodem=n
 CONFIG_PACKAGE_luci-app-qmodem-next=n

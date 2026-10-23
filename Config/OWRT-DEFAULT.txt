@@ -50,7 +50,7 @@ WRT_THEME=aurora
 # 【设备 WiFi 世代区分】
 # 默认值按设备 WiFi 世代区分：
 #   - AP3000M 为 WiFi6（802.11ax，MT7981B）；
-#   - H5000M 为 WiFi7（802.11be，MT7986 + MT5700M）。
+#   - H5000M 为 WiFi7（802.11be，MT7987A + MT7996E + MT5700M）。
 #
 # 【两组变量说明】
 #   - 无后缀变量（WRT_SSID 等）为 WiFi6 世代默认值（保持历史兼容）；
