@@ -2,6 +2,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
+# 任何克隆 / 解包 / feed 注册失败都必须让 CI 立即失败。
+# 之前的实现没有 set -e：REGISTER_QMODEM_FEED 等函数内部虽然 return 1，
+# 但调用处是普通语句，失败后脚本继续执行，最终退出码取自末尾的 PRIVATE.sh 判断，
+# 于是"QModem 未进固件"的构建仍显示成功。
+set -e -o pipefail
+
 #安装和更新软件包
 UPDATE_PACKAGE() {
 	local PKG_NAME=$1
@@ -31,17 +37,28 @@ UPDATE_PACKAGE() {
 	done
 
 	# 克隆 GitHub 仓库
-	git clone --depth=1 --single-branch --branch $PKG_BRANCH "https://github.com/$PKG_REPO.git"
+	if ! git clone --depth=1 --single-branch --branch "$PKG_BRANCH" "https://github.com/$PKG_REPO.git"; then
+		echo "::error title=Package clone failed::无法克隆 $PKG_REPO（分支 $PKG_BRANCH），构建中止"
+		return 1
+	fi
 
 	# 处理克隆的仓库
 	if [[ "$PKG_SPECIAL" == "pkg" ]]; then
-		find ./$REPO_NAME/*/ -maxdepth 3 -type d -iname "*$PKG_NAME*" -prune -exec cp -rf {} ./ \;
-		rm -rf ./$REPO_NAME/
+		local MATCHES
+		MATCHES=$(find "./$REPO_NAME"/*/ -maxdepth 3 -type d -iname "*$PKG_NAME*" -prune 2>/dev/null || true)
+		if [ -z "$MATCHES" ]; then
+			echo "::error title=Package extraction failed::$PKG_REPO 中未找到匹配 '$PKG_NAME' 的软件包目录"
+			return 1
+		fi
+		while read -r DIR; do
+			[ -n "$DIR" ] && cp -rf "$DIR" ./
+		done <<< "$MATCHES"
+		rm -rf "./$REPO_NAME/"
 	elif [[ "$PKG_SPECIAL" == "name" ]]; then
-		mv -f $REPO_NAME $PKG_NAME
+		mv -f "$REPO_NAME" "$PKG_NAME"
 	elif [[ "$PKG_SPECIAL" == "all" ]]; then
-		find ./$REPO_NAME/ -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ \;
-		rm -rf ./$REPO_NAME/
+		find "./$REPO_NAME/" -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ +
+		rm -rf "./$REPO_NAME/"
 	fi
 }
 
@@ -74,64 +91,91 @@ UPDATE_PACKAGE "netwizard" "sirpdboy/luci-app-netwizard" "main"
 UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 UPDATE_PACKAGE "partexp" "sirpdboy/luci-app-partexp" "main"
 UPDATE_PACKAGE "qbittorrent" "sbwml/luci-app-qbittorrent" "master" "" "qt6base qt6tools rblibtorrent"
-# qmodem-next 使用此核心脚本包；旧版 luci-app-qmodem 在配置中禁用
-UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
-
 # QModem 仓库按 feed（src-git）设计：顶层没有 Makefile，包分散在 application/、luci/、
-# driver/ 等二级目录。OpenWrt 的 package 扫描（package/Makefile 的 builddirs）只认含
-# Makefile 的一级子目录，仅把克隆目录放进 package/ 会整个不可见，导致
-# CONFIG_PACKAGE_luci-app-qmodem* / qmodem / sms-forwarder-next 等配置符号在 defconfig
-# 阶段被静默丢弃，固件里没有 qmodem。这里仿照上游 CI 的 src-link 方式把克隆目录注册为
-# 本地 feed，scripts/feeds 会递归扫描二级目录并把各包链接到 package/feeds/qmodem/ 下。
+# driver/ 等二级目录。若只把克隆目录放进 package/，构建系统虽然能递归扫描到二级
+# Makefile，但会把它们当作 core package；随后 feeds install 因 "Not overriding core
+# package" 拒绝创建链接，defconfig 阶段 CONFIG_PACKAGE_luci-app-qmodem* / qmodem /
+# sms-forwarder-next 等符号被静默丢弃，固件里没有 qmodem。这里仿照上游 CI 的
+# src-link 方式把克隆目录注册为本地 feed，scripts/feeds 会把各包链接到
+# package/feeds/qmodem/ 下。
 # feeds 目录在 WRT-CORE 的 Update Feeds 步骤已就绪，此处仅增量处理 qmodem feed。
 REGISTER_QMODEM_FEED() {
 	# 先把克隆目录移出 package/：否则 package/ 主扫描会提前命中 QModem 二级目录里的
 	# Makefile（application/*、luci/*），把 luci-app-qmodem / qmodem 等注册为 core
-	# package，feeds install 时 "Not overriding core package" 直接跳过链接，配置符号
-	# 在 defconfig 阶段又被静默丢弃，LuCI 前端依旧进不了固件。
-	if [ -d "./QModem" ] && [ ! -d "../QModem" ]; then
+	# package，feeds install 时 "Not overriding core package" 直接跳过链接。
+	if [ -d "./QModem" ] && [ -d "../QModem" ]; then
+		echo "::error title=Stale QModem checkout::package/QModem 与 ../QModem 同时存在，无法确定使用哪一份"
+		return 1
+	fi
+	if [ -d "./QModem" ]; then
 		mv -f ./QModem ../QModem
 		echo "qmodem: 克隆目录已移出 package/ 至 ../QModem"
 	fi
 	local QMODEM_DIR="../QModem"
-	[ -d "$QMODEM_DIR" ] || { echo "qmodem: 克隆目录不存在，跳过 feed 注册"; return 1; }
+	if [ ! -d "$QMODEM_DIR" ]; then
+		echo "::error title=QModem feed missing::QModem 克隆目录不存在，拒绝继续构建（固件将不含 qmodem 包）"
+		return 1
+	fi
 
 	# scripts/feeds 的解析顺序：feeds.conf 存在则完全替代 feeds.conf.default
 	local FEEDS_CONF="../feeds.conf"
-	[ -f "$FEEDS_CONF" ] || FEEDS_CONF="../feeds.conf.default"
+	if [ ! -f "$FEEDS_CONF" ]; then
+		FEEDS_CONF="../feeds.conf.default"
+	fi
+	if [ ! -f "$FEEDS_CONF" ]; then
+		echo "::error title=Feeds config missing::../feeds.conf 与 ../feeds.conf.default 均不存在"
+		return 1
+	fi
 
 	# src-link 的目标按原样传给 ln -s，必须用绝对路径
-	local QMODEM_ABS="$(cd ../QModem && pwd)"
+	local QMODEM_ABS
+	QMODEM_ABS="$(cd "$QMODEM_DIR" && pwd)"
 	if ! grep -q "^src-link qmodem " "$FEEDS_CONF" 2>/dev/null; then
 		echo "src-link qmodem $QMODEM_ABS" >> "$FEEDS_CONF"
 	fi
 
 	# src-link 的 update 为空操作，只会创建 feeds/qmodem -> 克隆目录 的链接
 	if ! ( cd .. && ./scripts/feeds update qmodem && ./scripts/feeds install -a -p qmodem ); then
-		echo "qmodem: feed 注册失败，固件将不含 qmodem 包"
+		echo "::error title=QModem feed registration failed::scripts/feeds 无法注册 qmodem feed（固件将不含 qmodem 包）"
 		return 1
 	fi
 	echo "qmodem: 已注册为本地 feed 并安装到 package/feeds/qmodem/"
 }
-REGISTER_QMODEM_FEED
 
-# QModem 包共用 version.mk 的 QMODEM_VERSION（当前上游发布 "3.4.0-rc.3"）。
-# OpenWrt 新版 apk 打包器不接受 `-rc.N`：版本串被拼成 "3.4.0-rc.3-rN" 后，
-# apk mkpkg 报 "package version is invalid"（Error 99），阻断整个固件构建
-# （libqmodem-sms / sms-tool_q 今日 6 job 全灭即此因）。这里在克隆后把
-# X.Y.Z-rc.N 改写为 apk 合法的 X.Y.Z_rcN；QModem 各包源码均内嵌仓库 src/，
-# 无版本化下载依赖，改写只影响包版本元数据。若上游已改为合法版本，自动跳过。
+# QModem 包共用 version.mk 的 QMODEM_VERSION。
+# OpenWrt 新版 apk 打包器不接受 `-rc.N` / `-rcN`：版本串被拼成 "3.4.0-rc.3-rN" 后，
+# apk mkpkg 报 "package version is invalid"（Error 99），阻断整个固件构建。
+# 这里在克隆后把 X.Y.Z-rc.N / X.Y.Z-rcN 改写为 apk 合法的 X.Y.Z_rcN；
+# QModem 各包源码均内嵌仓库 src/，无版本化下载依赖，改写只影响包版本元数据。
+# 上游当前版本为 3.4.0_rc3（已合法），函数会自动跳过；保留它是为了在上游回退
+# 到旧版本格式时仍能构建，不要删除。
 FIX_QMODEM_VERSION() {
 	local VER_FILE="../QModem/version.mk"
 	[ -f "$VER_FILE" ] || { echo "qmodem: version.mk not found, skip"; return 0; }
-	if grep -qE '^QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' "$VER_FILE"; then
-		sed -i -E 's/^(QMODEM_VERSION:=)([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$/\1\2_rc\3/' "$VER_FILE"
+	if grep -qE '^QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+-rc\.?[0-9]+$' "$VER_FILE"; then
+		sed -i -E 's/^(QMODEM_VERSION:=)([0-9]+\.[0-9]+\.[0-9]+)-rc\.?([0-9]+)$/\1\2_rc\3/' "$VER_FILE"
 		echo "qmodem: QMODEM_VERSION sanitized to $(grep -E '^QMODEM_VERSION:=' "$VER_FILE")"
 	else
 		echo "qmodem: QMODEM_VERSION already apk-valid, no change"
 	fi
 }
-FIX_QMODEM_VERSION
+
+# *-modem-pro 使用独立的 modem-pro-unified 方案，绝不能拉取 QModem：
+# QModem feed 会带来 qmodem 核心、两套前端及短信栈的包元数据，虽然 MODEM-PRO.txt
+# 已将它们设为 n，但克隆与 feed 注册仍会污染包索引、增加扫描时间，并可能在
+# 上游依赖变化时被意外选中（例如 qmodem-generic 的 DEPENDS:=+qmodem）。
+# 因此在源头按配置隔离，Modem Pro 构建完全不接触 QModem 仓库。
+if [[ "${WRT_CONFIG:-}" != *modem-pro ]]; then
+	# 所有 QModem 变体共用核心脚本包；前端由 QMODEM*.txt 选择
+	UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
+	REGISTER_QMODEM_FEED
+	FIX_QMODEM_VERSION
+
+	# 通用 QModem 管理界面（依赖 qmodem 核心），Modem Pro 配置不编入
+	UPDATE_PACKAGE "luci-app-qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
+else
+	echo "modem-pro: 跳过 QModem 克隆、feed 注册与 luci-app-qmodem-generic（隔离 QModem 依赖链）"
+fi
 
 # ===== modem-pro-unified：单一包 modem-pro（H5000M / AP3000M 共用，替代 QModem 模组管理）=====
 # 仓库顶层即唯一 Makefile，包位于 feed 根目录。但 OpenWrt 的 scripts/feeds 扫描要求包
@@ -151,7 +195,9 @@ if [[ "${WRT_CONFIG:-}" == *modem-pro ]]; then
 		rm -rf "$MODEM_PRO_FEED"
 		mkdir -p "$MODEM_PRO_FEED/modem-pro"
 		for ITEM in Makefile VERSION rust luci files packaging; do
-			[ -e "$MODEM_PRO_SRC/$ITEM" ] && cp -r "$MODEM_PRO_SRC/$ITEM" "$MODEM_PRO_FEED/modem-pro/$ITEM"
+			if [ -e "$MODEM_PRO_SRC/$ITEM" ]; then
+				cp -r "$MODEM_PRO_SRC/$ITEM" "$MODEM_PRO_FEED/modem-pro/$ITEM"
+			fi
 		done
 		# 克隆目录必须移出 package/：否则 package/ 主扫描会提前命中仓库根 Makefile，
 		# 把 modem-pro 注册为 core package，feeds install 时 "Not overriding core package"
@@ -161,20 +207,27 @@ if [[ "${WRT_CONFIG:-}" == *modem-pro ]]; then
 		find "$MODEM_PRO_FEED/modem-pro" -name target -type d -prune -exec rm -rf {} + 2>/dev/null
 
 		MODEM_PRO_FEEDS_CONF="../feeds.conf"
-		[ -f "$MODEM_PRO_FEEDS_CONF" ] || MODEM_PRO_FEEDS_CONF="../feeds.conf.default"
+		if [ ! -f "$MODEM_PRO_FEEDS_CONF" ]; then
+			MODEM_PRO_FEEDS_CONF="../feeds.conf.default"
+		fi
+		if [ ! -f "$MODEM_PRO_FEEDS_CONF" ]; then
+			echo "::error title=Feeds config missing::../feeds.conf 与 ../feeds.conf.default 均不存在"
+			exit 1
+		fi
 
 		MODEM_PRO_ABS="$(cd "$MODEM_PRO_FEED" && pwd)"
 		if ! grep -q "^src-link modem_pro " "$MODEM_PRO_FEEDS_CONF" 2>/dev/null; then
 			echo "src-link modem_pro $MODEM_PRO_ABS" >> "$MODEM_PRO_FEEDS_CONF"
 		fi
 
-		if ( cd .. && ./scripts/feeds update modem_pro && ./scripts/feeds install -a -p modem_pro ); then
-			echo "modem-pro: 已注册为本地 feed 并安装到 package/feeds/modem_pro/"
-		else
-			echo "modem-pro: feed 注册失败，固件将不含 modem-pro 包"
+		if ! ( cd .. && ./scripts/feeds update modem_pro && ./scripts/feeds install -a -p modem_pro ); then
+			echo "::error title=Modem Pro feed registration failed::scripts/feeds 无法注册 modem-pro feed（固件将不含 modem-pro 包）"
+			exit 1
 		fi
+		echo "modem-pro: 已注册为本地 feed 并安装到 package/feeds/modem_pro/"
 	else
-		echo "modem-pro: 克隆目录不存在，跳过 feed 注册"
+		echo "::error title=Modem Pro source missing::未找到 modem-pro-unified 克隆目录，拒绝继续构建"
+		exit 1
 	fi
 fi
 
@@ -182,8 +235,7 @@ fi
 # libwebsockets-full 互斥导致 -next 变体 rootfs 组装失败；上游现已将其降级为
 # PKG_RECOMMENDS（apk rootfs 组装不安装 RECOMMENDS，NEXT manifest 无 qmodem-sipd），
 # 冲突自上游侧消解，此处不再需要补丁脚本。FIX_QMODEM_VERSION 保留作为上游版本
-# 格式回退（-rc.N）时的构建保护。
-UPDATE_PACKAGE "luci-app-qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
+# 格式回退（-rc.N / -rcN）时的构建保护。
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
@@ -192,7 +244,7 @@ UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-bo
 # VIKINGYFY/packages 的 sing-box 自带 patches/100-fix-dns-tcp-close.patch，它是针对
 # 旧版 sing-box 的反向移植（引入上游从未合入的 HandleStreamDNSConnection）。当 feed 把
 # sing-box 升到 1.15.0_alpha8 后，该补丁上下文已与上游源码（仍是 HandleStreamDNSRequest）
-# 不匹配，OpenWrt 在 Build/Prepare 阶段应用补丁报 “Patch failed!” 并 Error 1，
+# 不匹配，OpenWrt 在 Build/Prepare 阶段应用补丁报 "Patch failed!" 并 Error 1，
 # 进而令整个固件编译中断（今日 MTK-AUTO 与 OWRT-ALL 两个定时构建同时失败即此因）。
 # 上游 immortalwrt/packages 的 sing-box 根本不携带该补丁也能正常构建，故这里在补丁确为
 # 旧版（内容含 HandleStreamDNSConnection）时移除它，恢复构建。若 VIKINGYFY 后续刷新该补丁
@@ -227,11 +279,11 @@ UPDATE_PACKAGE "luci-app-h5000m-netmode" "LianXia233/luci-app-h5000m-netmode" "m
 # 该插件后端已重写为 Rust crate，仓库里保留 src/（Rust 源码），并把预编译的静态 ELF
 # 直接随包发布在 root/usr/sbin 下（见插件 Makefile 顶部注释：buildroot 内没有 Rust 工具链）。
 # 但 feeds/luci/luci.mk 的两个分支判断条件并不一致：
-#   Build/Compile      按 $(wildcard ${CURDIR}/src/Makefile) 判断 —— 需要“有 Makefile”
-#   Package/.../install 按 $(wildcard ${CURDIR}/src)        判断 —— 只要“目录存在”即可
-# 于是 “有 src/ 但没有 src/Makefile” 这个组合会踩坑：Compile 被跳过、ipkg-install 目录
+#   Build/Compile      按 $(wildcard ${CURDIR}/src/Makefile) 判断 —— 需要"有 Makefile"
+#   Package/.../install 按 $(wildcard ${CURDIR}/src)        判断 —— 只要"目录存在"即可
+# 于是 "有 src/ 但没有 src/Makefile" 这个组合会踩坑：Compile 被跳过、ipkg-install 目录
 # 永远不会生成，install 阶段却仍执行 Build/Install/Default，即 make -C $(PKG_BUILD_DIR) install；
-# 该目录顶层没有 Makefile，make 报 “No rule to make target 'install'” 并以 exit code 2 退出，
+# 该目录顶层没有 Makefile，make 报 "No rule to make target 'install'" 并以 exit code 2 退出，
 # 表现为 luci.mk 末尾 BuildPackage 展开的打包规则报错（luci.mk:408），进而整个 world 编译中断。
 # 证据链：src/ 由插件 2026-09-28 的 c68ac211（rewrite backend as single static Rust ELF）引入，
 # 9-27 的 CI #99 仍成功，9-29 的 #100 是首个带 src/ 的构建，4 个 job 报错行与退出码完全一致。

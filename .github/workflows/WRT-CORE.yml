@@ -344,11 +344,10 @@ jobs:
             *)         VARIANT_FILE="$GITHUB_WORKSPACE/Config/QMODEM-NEXT.txt" ;;
           esac
 
-          if [[ "$WRT_TEST" == "true" ]]; then
-            cat "$WRT_CONFIG_FILE" "$VARIANT_FILE" >> .config
-          else
-            cat "$WRT_CONFIG_FILE" "$GITHUB_WORKSPACE/Config/GENERAL.txt" "$VARIANT_FILE" >> .config
-          fi
+          # GENERAL.txt 必须在所有模式下加载：它是 qmodem 核心、通用插件与工具链
+          # 配置的真实来源。TEST 模式此前跳过 GENERAL，生成的 .config 与实际固件
+          # 相差数百个符号，既无法用于排查也无法验证配置合并顺序。
+          cat "$WRT_CONFIG_FILE" "$GITHUB_WORKSPACE/Config/GENERAL.txt" "$VARIANT_FILE" >> .config
 
           # 启用 ccache，把编译缓存落到 ./.ccache（与上面缓存的 path 对应），
           # 重复编译、仅改配置或插件时可大幅缩短耗时
@@ -356,7 +355,26 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/Settings.sh
 
+          # 保存合并后、defconfig 前的完整请求配置，供下一步逐符号核对
+          # 是否有 qmodem / 前端 / 驱动 / 插件符号被 Kconfig 静默丢弃。
+          cp .config .config.requested
+
           make defconfig && make clean
+
+      - name: Verify Config (Defconfig Assertions)
+        # 配置被静默丢弃是历史反复出现的问题（QModem feed 未注册、QMI choice 落回
+        # 厂商驱动、input/audio 特性门控未开、驱动包更名等）。这里在编译前做硬断言：
+        # 1) 请求配置中每个 =y 符号都必须在 defconfig 后仍为 y；
+        # 2) 按变体校验 qmodem / 前端 / 短信栈 / 通用 QMI 驱动 / 互斥关系；
+        # 3) 按机型校验设备与专有插件。
+        # 任何一项失败都会以 ::error:: 注解并阻断构建，而不是带着缺包的固件继续。
+        run: |
+          cd ./wrt/
+          python3 "$GITHUB_WORKSPACE/Scripts/check_defconfig.py" \
+            --config .config \
+            --requested .config.requested \
+            --variant "$WRT_VARIANT" \
+            --name "$WRT_CONFIG"
 
       - name: Download Packages
         if: env.WRT_TEST != 'true'

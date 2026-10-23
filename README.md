@@ -10,7 +10,7 @@
 [![Cellular Modem](https://img.shields.io/badge/Cellular-QModem%20%2F%20Modem%20Pro-blueviolet)](#)
 [![CI Build](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-blue?logo=githubactions&logoColor=white)](#)
 
-*全面支持 Hiveton H5000M (MT7986 + MT5700M)、AirPi AP3000M (MT7981B) 与通用 x86_64 平台*
+*全面支持 Hiveton H5000M (MT7987A + MT7996E + MT5700M)、AirPi AP3000M (MT7981B) 与通用 x86_64 平台*
 
 ---
 
@@ -31,7 +31,7 @@
 
 | 目标机型 | 平台架构 / SoC | 硬件形态与特性 | Wi-Fi 驱动栈 | 源码上游 / 分支 |
 | :--- | :--- | :--- | :---: | :--- |
-| **`H5000M`** | MediaTek Filogic (MT7986) | Hiveton H5000M 5G CPE（鼎桥 MT5700M） | ✅ 开启 | `immortalwrt/immortalwrt` (`master`)；Modem Pro 用 `VIKINGYFY/immortalwrt` (`owrt`) |
+| **`H5000M`** | MediaTek Filogic (MT7987A + MT7996E) | Hiveton H5000M 5G CPE（鼎桥 MT5700M） | ✅ 开启 | `immortalwrt/immortalwrt` (`master`)；Modem Pro 用 `VIKINGYFY/immortalwrt` (`owrt`) |
 | **`AP3000M`** | MediaTek Filogic (MT7981B) | AirPi AP3000M Wi-Fi 6 路由器 | ✅ 开启（开源 mt76） | `immortalwrt/immortalwrt` (`master`)；Modem Pro 用 `VIKINGYFY/immortalwrt` (`owrt`) |
 | **`X86`** | x86_64 通用架构 | 工控机 / 软路由 / 物理 PC / 虚拟机 | — | `immortalwrt/immortalwrt` (`master`) |
 
@@ -58,7 +58,7 @@
 
 | 对比维度 | `*-modem-pro` |
 | :--- | :--- |
-| **机型覆盖** | `H5000M-modem-pro`（MT7986 + MT5700M）、`AP3000M-modem-pro`（MT7981B） |
+| **机型覆盖** | `H5000M-modem-pro`（MT7987A + MT7996E + MT5700M）、`AP3000M-modem-pro`（MT7981B） |
 | **源码基线** | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支（QModem 配置仍使用 `immortalwrt/immortalwrt` 的 `master`） |
 | **AP3000M 网口映射** | 与 `immortalwrt` 主线固件**相反**（LAN / WAN 对调）：两套固件互刷后需自行调换网线，详见下方刷机提醒 |
 | **模组管理栈** | [modem-pro-unified](https://github.com/LianXia233/modem-pro-unified) 统一包，单一顶层包 `modem-pro` |

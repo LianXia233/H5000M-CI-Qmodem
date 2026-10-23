@@ -3,11 +3,12 @@ CONFIG_PACKAGE_luci-app-qmodem=y
 CONFIG_PACKAGE_luci-app-qmodem-next=n
 CONFIG_PACKAGE_luci-i18n-qmodem-zh-cn=y
 CONFIG_PACKAGE_sms-forwarder-next=n
-# input-support 是 ImmortalWrt package/system/hardware-support 的特性门控包：
-# input/HID/USB 串口等内核模块在 Kconfig 中 depends on PACKAGE_input-support，
-# 未启用时整条链（含 qmodem 硬依赖的 kmod-usb-acm / kmod-usb-serial-qualcomm）
-# 被静默隐藏，qmodem 及其 select 的全部组件不进固件（2026-10-11 复现的教训，
-# 2026-10-04 #23 修复的真正原因——依赖是内核模块生态的门控，不在 QModem 仓库内）
+# input-support 是 ImmortalWrt hardware-support 的特性门控包。
+# 历史背景：2026-10 曾出现 USB serial/acm 依赖该门控，未启用时整条 QModem
+# 依赖链被静默隐藏（2026-10-11 复现）。当前 master 中该依赖已收窄到
+# input-evdev / input-joydev / usb-hid 的 evdev 选择，USB serial 不再依赖它，
+# 但这里仍显式启用作为兼容保护：QModem 配置若切换到仍保留旧依赖的分支，
+# 删除本行会再次导致整个前端与核心包被丢弃。不要删除。
 CONFIG_PACKAGE_input-support=y
 # QMI 驱动 choice 符号挂在 qmodem 主包上（上游 964d8dd32 定义为 PACKAGE_qmodem_INCLUDE_*；
 # 旧名 luci-app-qmodem_INCLUDE_* 不存在，defconfig 会静默丢弃，导致 choice 落到上游默认
