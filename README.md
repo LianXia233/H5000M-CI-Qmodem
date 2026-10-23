@@ -60,6 +60,7 @@
 | :--- | :--- |
 | **机型覆盖** | `H5000M-modem-pro`（MT7986 + MT5700M）、`AP3000M-modem-pro`（MT7981B） |
 | **源码基线** | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支（QModem 配置仍使用 `immortalwrt/immortalwrt` 的 `master`） |
+| **AP3000M 网口映射** | 与 `immortalwrt` 主线固件**相反**（LAN / WAN 对调）：两套固件互刷后需自行调换网线，详见下方刷机提醒 |
 | **模组管理栈** | [modem-pro-unified](https://github.com/LianXia233/modem-pro-unified) 统一包，单一顶层包 `modem-pro` |
 | **拨号后端** | Rust 守护进程 `modemd`，内置 QMI / MBIM 拨号，经 netifd 协议接管 |
 | **前端形态** | ucode/JS 世代 LuCI 前端，由 `modemd` 提供 ubus 接口 |
@@ -104,6 +105,10 @@
 > AP3000M (MT7981B) 依赖开源 `mt76` Wi-Fi 驱动栈。由于设备出厂时 eMMC 的 `mmcblk0p2` factory 分区为空，会导致驱动因读取不到校准数据而初始化失败。
 > 本仓库已在 `Config/` 与 `Scripts/Handles.sh` 中集成原厂备份的校准模板；系统首次引导时，`99-ap3000m-eeprom` 会自动从 `eth0` 获取设备物理 MAC 地址写入 factory 分区，并将 radio1 修正为 5GHz 频段，实现开箱即用。
 
+> [!WARNING]
+> **AP3000M 双源码网口顺序相反（刷机必读）**：
+> `AP3000M-qmodem-next` / `AP3000M-qmodem` 基于 `immortalwrt/immortalwrt`（`master`），而 `AP3000M-modem-pro` 基于 `VIKINGYFY/immortalwrt`（`owrt`）。两套源码对 AP3000M 的 **LAN / WAN 网口映射是相反的**：从 QModem 固件切换刷入 Modem Pro 固件（或反向切换）后，原先插在 LAN 口的网线需要改插到 WAN 口，反之亦然，否则会出现无法上网或管理页打不开。刷入后请自行调换网线，无需改动其他配置。
+
 ---
 
 ## ⚙️ 默认出厂配置
@@ -131,7 +136,7 @@
 
 | 编译工作流 | 触发模式 | 核心功能与职责 |
 | :--- | :--- | :--- |
-| **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自由选择机型、版本后缀（`-qmodem-next`、`-qmodem`，或 H5000M / AP3000M 的 `-modem-pro`）；源码仓库选定后分支自动匹配（`immortalwrt` → `master`、`VIKINGYFY` → MTK 机型 `owrt` / 其他 `main`、`chasey-dev` → `25.12`），无需手动填写；支持 `TEST=true` 快速校验生成配置 |
+| **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自由选择机型、版本后缀（`-qmodem-next`、`-qmodem`，或 H5000M / AP3000M 的 `-modem-pro`）；源码与分支自动匹配（X86 固定 `immortalwrt/master`，MTK 机型 `immortalwrt` → `master`、`VIKINGYFY` → `owrt`、`chasey-dev` → `25.12`），无需手动填写；支持 `TEST=true` 快速校验生成配置 |
 | **`MTK-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 MTK 架构设备（H5000M / AP3000M）的三版本固件，每款机型均包含 `-qmodem-next`、`-qmodem` 与 `-modem-pro`；两套 Modem Pro 使用 `VIKINGYFY/immortalwrt` 的 `owrt` 分支 |
 | **`OWRT-ALL`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 x86 平台的双版本固件 |
 | **`Auto-Clean`** | 每日 05:00 (CST) 定时 / 手动 | 定期清理历史制品（保留最新 1 份 Release）与 30 天以上的 Runs 日志 |
@@ -142,7 +147,7 @@
 1. 进入 GitHub 仓库主页，点击 **`Actions`** 选项卡。
 2. 在左侧列表定位到 **`WRT-BUILD`** 工作流，点击右侧 **`Run workflow`**。
 3. 选择对应的配置模板（如 `H5000M-qmodem-next`、`H5000M-qmodem`，或 Modem Pro 统一版的 `H5000M-modem-pro` / `AP3000M-modem-pro`）。
-4. 如需更换编译源码，只需在 **`SOURCE`** 中选择仓库，分支由流水线自动匹配（`immortalwrt` → `master`、`VIKINGYFY` → MTK 机型 `owrt` / 其他 `main`、`chasey-dev` → `25.12`），无需手动填写；运行摘要中会显示最终使用的仓库与分支。
+4. 如需更换编译源码，只需在 **`SOURCE`** 中选择仓库，源码与分支由流水线自动匹配（X86 固定 `immortalwrt/immortalwrt` + `master`；H5000M / AP3000M 为 `immortalwrt` → `master`、`VIKINGYFY` → `owrt`、`chasey-dev` → `25.12`），无需手动填写；运行摘要中会显示最终使用的仓库与分支。
 5. **测试开关说明**：
    - `TEST=true`（默认）：仅执行配置合并并导出 `.config` 检查语法，不执行实质编译。
    - `TEST=false`：执行全量编译并打包上传，自动在 Release 页面生成固件产物。

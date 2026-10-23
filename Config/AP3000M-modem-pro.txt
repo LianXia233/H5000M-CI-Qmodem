@@ -1,3 +1,7 @@
+# 网口映射提醒：MTK-AUTO 中本配置使用 VIKINGYFY/immortalwrt（owrt）编译，
+# AP3000M 的 LAN/WAN 顺序与 immortalwrt/immortalwrt 主线固件相反；
+# 两套固件互刷后需自行调换网线（详见 README 的 AP3000M 刷机提醒）。
+
 # 设备平台
 CONFIG_TARGET_mediatek=y
 CONFIG_TARGET_mediatek_filogic=y

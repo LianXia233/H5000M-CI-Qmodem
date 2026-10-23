@@ -1,5 +1,40 @@
 # 更新日志
 
+## [2026-10-23] X86 源码固定 immortalwrt master；补充 AP3000M 双源码网口差异提醒
+
+### 背景
+
+- X86 平台（`X86-qmodem-next` / `X86-qmodem`）统一固定使用
+  `immortalwrt/immortalwrt` 的 `master` 分支；即使 `WRT-BUILD` 中选择了其他
+  `SOURCE`，也会覆盖为 immortalwrt 并给出警告，避免 X86 误用第三方分支。
+- AP3000M 两套源码的 LAN / WAN 网口映射相反，用户在 QModem 与 Modem Pro
+  固件之间切换刷机后需要自行调换网线，文档需显著提醒。
+
+### 改动
+
+- `.github/workflows/WRT-BUILD.yml`：
+  - `resolve` 任务新增 `source` 输出；`CONFIG=X86-*` 时固定解析为
+    `immortalwrt/immortalwrt` + `master`，所选 `SOURCE` 不同则输出 warning。
+  - `WRT_REPO` / `WRT_SOURCE` 改用解析后的源码，确保实际构建与运行摘要一致。
+- `README.md`：`WRT-BUILD` 说明与手动构建步骤更新 X86 固定规则；Modem Pro
+  对比表新增 AP3000M 网口映射行；AP3000M 章节新增网口顺序警告。
+- `Config/AP3000M-modem-pro.txt`：新增网口映射提醒注释。
+- `index.html`：AP3000M 硬件卡新增网口顺序条目，初次接入指引新增互刷后调换
+  网线提醒，流水线职责表同步 X86 固定规则。
+- `CHANGELOG.md`：本条目。
+
+### 说明
+
+- 源码策略：X86 仅 `immortalwrt/master`；H5000M / AP3000M 默认
+  `immortalwrt/master`，选择 `VIKINGYFY` 时用 `owrt`，`chasey-dev` 用 `25.12`。
+- AP3000M 网口相反仅涉及物理网线接法，与 IP、防火墙等配置无关，
+  调换网线即可恢复上网。
+
+### 验证
+
+- `WRT-BUILD` 通过 YAML 解析校验；`resolve` 逻辑覆盖 X86 固定与 MTK
+  三种源码仓库组合。
+
 ## [2026-10-23] Modem Pro 源码切换至 VIKINGYFY owrt，WRT-BUILD 分支自动匹配
 
 ### 背景

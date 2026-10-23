@@ -1637,6 +1637,10 @@
                 <span class="hw-spec-label">源码来源</span>
                 <span class="hw-spec-val">ImmortalWrt Master 主线<br>Modem Pro：VIKINGYFY owrt</span>
               </li>
+              <li class="hw-spec-item">
+                <span class="hw-spec-label">网口顺序</span>
+                <span class="hw-spec-val">Modem Pro 与主线固件 LAN/WAN 相反<br>两套固件互刷后需调换网线</span>
+              </li>
             </ul>
 
             <div class="hw-special-tag">
@@ -1916,6 +1920,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             <div>
               <strong>初次接入指引</strong>：刷机完成后请耐心等待 1-2 分钟让系统执行 EEPROM 恢复与分区展开。使用网线连接设备 LAN 口或搜索连接名为 <code>OWRT</code> 的无线网络（密码 <code>12345678</code>），浏览器访问 <code>http://192.168.10.1</code> 即可直接进入管理后台。
+              <p style="margin-top:8px;"><strong>AP3000M 网口提醒</strong>：QModem 固件（immortalwrt 主线）与 Modem Pro 固件（VIKINGYFY owrt）的 LAN / WAN 顺序相反，两套固件互刷后请自行调换网线，否则可能出现无法上网或管理页打不开。</p>
             </div>
           </div>
         </div>
@@ -1974,7 +1979,7 @@
                 <tr>
                   <td><strong><code>WRT-BUILD</code></strong></td>
                   <td>手动 <code>workflow_dispatch</code></td>
-                  <td>自定义按需编译。可自由切换机型、版本与源码仓库，分支按仓库自动匹配（无需手填）；<code>TEST=true</code> 仅语法检查，<code>TEST=false</code> 实质编译</td>
+                  <td>自定义按需编译。可自由切换机型与版本；分支自动匹配，X86 固定使用 immortalwrt/master，无需手填；<code>TEST=true</code> 仅语法检查，<code>TEST=false</code> 实质编译</td>
                 </tr>
                 <tr>
                   <td><strong><code>MTK-AUTO</code></strong></td>
