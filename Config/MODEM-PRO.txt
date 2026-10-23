@@ -1,4 +1,4 @@
-# ===== modem-pro 统一模组管理（AP3000M 专属方案）=====
+# ===== modem-pro 统一模组管理（H5000M / AP3000M 共用方案）=====
 # 单一包 modem-pro：Rust 守护进程 modemd（内置 QMI / MBIM 拨号）+ netifd 协议 + LuCI 前端。
 # 由 Scripts/Packages.sh 以本地 feed（src-link）注册；Rust 后端走宿主 rustup 直编
 # （MODEM_PRO_HOST_RUST），跳过 feeds 的 rust/host 源码编译。该开关必须在 feeds 包元数据

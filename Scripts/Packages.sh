@@ -133,7 +133,7 @@ FIX_QMODEM_VERSION() {
 }
 FIX_QMODEM_VERSION
 
-# ===== modem-pro-unified：单一包 modem-pro（AP3000M 专属，替代 QModem 模组管理）=====
+# ===== modem-pro-unified：单一包 modem-pro（H5000M / AP3000M 共用，替代 QModem 模组管理）=====
 # 仓库顶层即唯一 Makefile，包位于 feed 根目录。但 OpenWrt 的 scripts/feeds 扫描要求包
 # Makefile 位于 feed 的【子目录】下（feed_dir/<pkg>/Makefile）——直接用 src-link 指向
 # 仓库根时，scan.mk 的路径截断逻辑会把 `call BuildPackage` 的 grep 输出误当包路径，

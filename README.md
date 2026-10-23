@@ -44,7 +44,7 @@
 
 ### 1. 蜂窝模组方案对比
 
-每个硬件机型均编译发布两套互相独立的 QModem 配置，用户可按交互习惯自由选择；Hiveton H5000M 与 AirPi AP3000M 另各提供一套独立的 Modem Pro 方案：
+每个硬件机型均编译发布两套互相独立的 QModem 配置，用户可按交互习惯自由选择；Hiveton H5000M 与 AirPi AP3000M 在此之上另各提供一套独立的 Modem Pro 方案（即 MTK 机型共三套变体，x86 为两套）：
 
 | 对比维度 | `*-qmodem-next`（现代版） | `*-qmodem`（传统版） |
 | :--- | :--- | :--- |
@@ -131,7 +131,7 @@
 | 编译工作流 | 触发模式 | 核心功能与职责 |
 | :--- | :--- | :--- |
 | **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自由选择机型、版本后缀（`-qmodem-next`、`-qmodem`，或 H5000M / AP3000M 的 `-modem-pro`）；支持 `TEST=true` 快速校验生成配置 |
-| **`MTK-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 MTK 架构设备（H5000M / AP3000M）的双版本固件（不含 `H5000M-modem-pro` / `AP3000M-modem-pro`，这两套配置仅手动触发） |
+| **`MTK-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 MTK 架构设备（H5000M / AP3000M）的三版本固件，每款机型均包含 `-qmodem-next`、`-qmodem` 与 `-modem-pro` |
 | **`OWRT-ALL`** | 每日定时 (随 Auto-Clean) / 手动 | 自动构建并并行发布 x86 平台的双版本固件 |
 | **`Auto-Clean`** | 每日 05:00 (CST) 定时 / 手动 | 定期清理历史制品（保留最新 1 份 Release）与 30 天以上的 Runs 日志 |
 | **`Cache-Clean`** | 每周定时 / 手动 | 回收 Actions 编译构建缓存，避免缓存陈旧 |
@@ -178,7 +178,7 @@ OpenWRT-CI-H5000M/
 │   ├── GENERAL.txt             # 全设备通用内核与基础功能包
 │   ├── QMODEM-NEXT.txt         # QModem Next 前端及依赖链
 │   ├── QMODEM.txt              # 传统 QModem 前端及依赖链
-│   ├── MODEM-PRO.txt           # Modem Pro 统一模组方案（AP3000M 专属，禁用 QModem）
+│   ├── MODEM-PRO.txt           # Modem Pro 统一模组方案（H5000M / AP3000M 共用，禁用 QModem）
 │   ├── H5000M-*.txt            # H5000M 机型配置定义
 │   └── AP3000M-*.txt           # AP3000M 机型配置定义
 ├── Scripts/                    # 流水线生命周期钩子

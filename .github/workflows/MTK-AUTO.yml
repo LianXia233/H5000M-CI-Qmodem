@@ -27,10 +27,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 每款 MTK 机型三套变体：QModem Next / QModem 传统版 / Modem Pro 统一版
           - CONFIG: H5000M-qmodem-next
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
           - CONFIG: H5000M-qmodem
+            SOURCE: immortalwrt/immortalwrt
+            BRANCH: master
+          - CONFIG: H5000M-modem-pro
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
           - CONFIG: AP3000M-qmodem-next
@@ -39,7 +43,9 @@ jobs:
           - CONFIG: AP3000M-qmodem
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
-          
+          - CONFIG: AP3000M-modem-pro
+            SOURCE: immortalwrt/immortalwrt
+            BRANCH: master
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:

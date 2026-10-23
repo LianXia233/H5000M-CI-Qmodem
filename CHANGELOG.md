@@ -1,5 +1,39 @@
 # 更新日志
 
+## [2026-10-23] Modem Pro 纳入 MTK-AUTO 每日自动编译
+
+### 背景
+
+`H5000M-modem-pro` / `AP3000M-modem-pro` 此前仅能通过 `WRT-BUILD` 手动触发。
+现将其加入 `MTK-AUTO` 定时矩阵，与两套 QModem 配置一样在每日 Auto-Clean 之后
+自动构建并发版，用户无需再手动发起。
+
+### 改动
+
+- `.github/workflows/MTK-AUTO.yml`：矩阵新增 `H5000M-modem-pro`、
+  `AP3000M-modem-pro`，MTK 每款机型由双版本扩展为三版本
+  （`-qmodem-next` / `-qmodem` / `-modem-pro`）；定时任务由 4 个 job 增至 6 个。
+- `README.md`：工作流一览更新 `MTK-AUTO` 职责为三版本固件；方案对比与目录说明
+  同步 Modem Pro 覆盖 H5000M / AP3000M。
+- `index.html`：流水线职责表与蜂窝方案说明同步三版本描述。
+- `Config/MODEM-PRO.txt`、`Scripts/Packages.sh`：注释由「AP3000M 专属」更正为
+  「H5000M / AP3000M 共用」。
+- `CHANGELOG.md`：本条目。
+
+### 无需改动的部分
+
+- `.github/workflows/WRT-CORE.yml`：`*-modem-pro` 变体识别、`MODEM_PRO_HOST_RUST=1`
+  注入、「Seed Modem-Pro Config」与「Setup Host Rust Toolchain」均按配置名后缀匹配，
+  定时触发与手动触发走同一条通路。
+- `Scripts/Packages.sh`：`*-modem-pro` 门控拉取并注册 `modem_pro` 本地 feed 的逻辑不变。
+- `Auto-Clean.yml`：keep-latest 按 `-immortalwrt-` 前的机型名分组，新变体
+  （如 `H5000M-modem-pro`）即为独立分组，清理行为符合预期。
+
+### 验证
+
+- `.github/workflows/MTK-AUTO.yml` 通过 YAML 语法校验。
+- 端到端确认待下一次定时构建（Auto-Clean 完成后）或手动 `workflow_dispatch`。
+
 ## [2026-10-20] H5000M 新增 Modem Pro 统一模组方案配置（独立编译目标）
 
 ### 背景
