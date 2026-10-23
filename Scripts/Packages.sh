@@ -2,6 +2,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
+# 任何克隆 / 解包 / feed 注册失败都必须让 CI 立即失败。
+# 之前的实现没有 set -e：REGISTER_QMODEM_FEED 等函数内部虽然 return 1，
+# 但调用处是普通语句，失败后脚本继续执行，最终退出码取自末尾的 PRIVATE.sh 判断，
+# 于是"QModem 未进固件"的构建仍显示成功。
+set -e -o pipefail
+
 #安装和更新软件包
 UPDATE_PACKAGE() {
 	local PKG_NAME=$1
@@ -31,17 +37,28 @@ UPDATE_PACKAGE() {
 	done
 
 	# 克隆 GitHub 仓库
-	git clone --depth=1 --single-branch --branch $PKG_BRANCH "https://github.com/$PKG_REPO.git"
+	if ! git clone --depth=1 --single-branch --branch "$PKG_BRANCH" "https://github.com/$PKG_REPO.git"; then
+		echo "::error title=Package clone failed::无法克隆 $PKG_REPO（分支 $PKG_BRANCH），构建中止"
+		return 1
+	fi
 
 	# 处理克隆的仓库
 	if [[ "$PKG_SPECIAL" == "pkg" ]]; then
-		find ./$REPO_NAME/*/ -maxdepth 3 -type d -iname "*$PKG_NAME*" -prune -exec cp -rf {} ./ \;
-		rm -rf ./$REPO_NAME/
+		local MATCHES
+		MATCHES=$(find "./$REPO_NAME"/*/ -maxdepth 3 -type d -iname "*$PKG_NAME*" -prune 2>/dev/null || true)
+		if [ -z "$MATCHES" ]; then
+			echo "::error title=Package extraction failed::$PKG_REPO 中未找到匹配 '$PKG_NAME' 的软件包目录"
+			return 1
+		fi
+		while read -r DIR; do
+			[ -n "$DIR" ] && cp -rf "$DIR" ./
+		done <<< "$MATCHES"
+		rm -rf "./$REPO_NAME/"
 	elif [[ "$PKG_SPECIAL" == "name" ]]; then
-		mv -f $REPO_NAME $PKG_NAME
+		mv -f "$REPO_NAME" "$PKG_NAME"
 	elif [[ "$PKG_SPECIAL" == "all" ]]; then
-		find ./$REPO_NAME/ -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ \;
-		rm -rf ./$REPO_NAME/
+		find "./$REPO_NAME/" -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./\;
+		rm -rf "./$REPO_NAME/"
 	fi
 }
 
@@ -151,7 +168,9 @@ if [[ "${WRT_CONFIG:-}" == *modem-pro ]]; then
 		rm -rf "$MODEM_PRO_FEED"
 		mkdir -p "$MODEM_PRO_FEED/modem-pro"
 		for ITEM in Makefile VERSION rust luci files packaging; do
-			[ -e "$MODEM_PRO_SRC/$ITEM" ] && cp -r "$MODEM_PRO_SRC/$ITEM" "$MODEM_PRO_FEED/modem-pro/$ITEM"
+			if [ -e "$MODEM_PRO_SRC/$ITEM" ]; then
+				cp -r "$MODEM_PRO_SRC/$ITEM" "$MODEM_PRO_FEED/modem-pro/$ITEM"
+			fi
 		done
 		# 克隆目录必须移出 package/：否则 package/ 主扫描会提前命中仓库根 Makefile，
 		# 把 modem-pro 注册为 core package，feeds install 时 "Not overriding core package"
@@ -161,20 +180,27 @@ if [[ "${WRT_CONFIG:-}" == *modem-pro ]]; then
 		find "$MODEM_PRO_FEED/modem-pro" -name target -type d -prune -exec rm -rf {} + 2>/dev/null
 
 		MODEM_PRO_FEEDS_CONF="../feeds.conf"
-		[ -f "$MODEM_PRO_FEEDS_CONF" ] || MODEM_PRO_FEEDS_CONF="../feeds.conf.default"
+		if [ ! -f "$MODEM_PRO_FEEDS_CONF" ]; then
+			MODEM_PRO_FEEDS_CONF="../feeds.conf.default"
+		fi
+		if [ ! -f "$MODEM_PRO_FEEDS_CONF" ]; then
+			echo "::error title=Feeds config missing::../feeds.conf 与 ../feeds.conf.default 均不存在"
+			exit 1
+		fi
 
 		MODEM_PRO_ABS="$(cd "$MODEM_PRO_FEED" && pwd)"
 		if ! grep -q "^src-link modem_pro " "$MODEM_PRO_FEEDS_CONF" 2>/dev/null; then
 			echo "src-link modem_pro $MODEM_PRO_ABS" >> "$MODEM_PRO_FEEDS_CONF"
 		fi
 
-		if ( cd .. && ./scripts/feeds update modem_pro && ./scripts/feeds install -a -p modem_pro ); then
-			echo "modem-pro: 已注册为本地 feed 并安装到 package/feeds/modem_pro/"
-		else
-			echo "modem-pro: feed 注册失败，固件将不含 modem-pro 包"
+		if ! ( cd .. && ./scripts/feeds update modem_pro && ./scripts/feeds install -a -p modem_pro ); then
+			echo "::error title=Modem Pro feed registration failed::scripts/feeds 无法注册 modem-pro feed（固件将不含 modem-pro 包）"
+			exit 1
 		fi
+		echo "modem-pro: 已注册为本地 feed 并安装到 package/feeds/modem_pro/"
 	else
-		echo "modem-pro: 克隆目录不存在，跳过 feed 注册"
+		echo "::error title=Modem Pro source missing::未找到 modem-pro-unified 克隆目录，拒绝继续构建"
+		exit 1
 	fi
 fi
 
