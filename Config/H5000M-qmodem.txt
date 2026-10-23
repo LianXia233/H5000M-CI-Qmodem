@@ -2,14 +2,20 @@
 CONFIG_TARGET_mediatek=y
 CONFIG_TARGET_mediatek_filogic=y
 
-# 仅编译 Hiveton H5000M
-CONFIG_TARGET_MULTI_PROFILE=n
+# 仅编译 Hiveton H5000M（MULTI_PROFILE 由 GENERAL.txt 统一启用）
 CONFIG_TARGET_ALL_PROFILES=n
 CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_hiveton_h5000m=y
 
 # 内核调整
 CONFIG_PACKAGE_kmod-cryptodev=y
 CONFIG_PACKAGE_kmod-tls=y
+
+# MTD / NAND 与 CPU 调频工具（仅 MediaTek ARM 平台可用：
+# kmod-mtd-rw 明确排除 x86，nand-utils 依赖 NAND_SUPPORT，cpufreq 依赖 arm/aarch64，
+# 放在 GENERAL.txt 会在 x86 构建里被 defconfig 静默丢弃）
+CONFIG_PACKAGE_kmod-mtd-rw=y
+CONFIG_PACKAGE_nand-utils=y
+CONFIG_PACKAGE_cpufreq=y
 
 # H5000M 风扇控制
 CONFIG_PACKAGE_luci-app-h5000m-fancontrol=y
