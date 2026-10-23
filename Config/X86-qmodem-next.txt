@@ -5,7 +5,6 @@ CONFIG_TARGET_ALL_PROFILES=y
 
 # 镜像格式与引导支持
 CONFIG_ISO_IMAGES=y
-CONFIG_EFI_IMAGES=y
 CONFIG_GRUB_IMAGES=y
 CONFIG_GRUB_EFI_IMAGES=y
 CONFIG_VMDK_IMAGES=y
@@ -42,7 +41,7 @@ CONFIG_PACKAGE_kmod-input-evdev=y
 CONFIG_PACKAGE_kmod-mt76=y
 CONFIG_PACKAGE_kmod-mt7603=y
 CONFIG_PACKAGE_kmod-mt76x0e=y
-CONFIG_PACKAGE_kmod-mt76x2e=y
+CONFIG_PACKAGE_kmod-mt76x2=y
 CONFIG_PACKAGE_kmod-mt7615e=y
 CONFIG_PACKAGE_kmod-mt7915e=y
 CONFIG_PACKAGE_kmod-mt7915-firmware=y
@@ -82,14 +81,22 @@ CONFIG_PACKAGE_ath11k-firmware-wcn6855=y
 CONFIG_PACKAGE_kmod-ath12k=y
 
 # Realtek rtw88 / rtw89
-CONFIG_PACKAGE_kmod-rtw88=y
-CONFIG_PACKAGE_kmod-rtw88-pci=y
-CONFIG_PACKAGE_kmod-rtw88-usb=y
-CONFIG_PACKAGE_kmod-rtw88-8821c=y
-CONFIG_PACKAGE_kmod-rtw88-8822b=y
-CONFIG_PACKAGE_kmod-rtw88-8822c=y
-CONFIG_PACKAGE_kmod-rtw89=y
-CONFIG_PACKAGE_kmod-rtw89-pci=y
+# kmod-rtw88 / -pci / -usb 与 8821c/8822b/8822c 是 HIDDEN 公共包，没有可见
+# Kconfig 符号，直接写 =y 会在 defconfig 阶段被丢弃（此前 6 个符号全部无效）。
+# 必须选择具体设备包，由依赖自动选中公共部分与固件。
+CONFIG_PACKAGE_kmod-rtw88-8821ce=y
+CONFIG_PACKAGE_kmod-rtw88-8821cu=y
+CONFIG_PACKAGE_kmod-rtw88-8822be=y
+CONFIG_PACKAGE_kmod-rtw88-8822bu=y
+CONFIG_PACKAGE_kmod-rtw88-8822ce=y
+CONFIG_PACKAGE_kmod-rtw88-8822cu=y
+CONFIG_PACKAGE_kmod-rtw88-8723de=y
+CONFIG_PACKAGE_kmod-rtw88-8723du=y
+CONFIG_PACKAGE_kmod-rtw88-8812au=y
+CONFIG_PACKAGE_kmod-rtw88-8821au=y
+CONFIG_PACKAGE_kmod-rtw88-8814ae=y
+CONFIG_PACKAGE_kmod-rtw88-8814au=y
+# 8852ae/be/ce 是可见设备包，会 select 隐藏的 kmod-rtw89 与 kmod-rtw89-pci
 CONFIG_PACKAGE_kmod-rtw89-8852ae=y
 CONFIG_PACKAGE_kmod-rtw89-8852be=y
 CONFIG_PACKAGE_kmod-rtw89-8852ce=y
