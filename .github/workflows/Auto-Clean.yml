@@ -21,6 +21,11 @@ jobs:
   auto_clean:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Config (device names for keep-latest)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: Config
+
       - name: Clear Releases (delete all files / keep latest optional)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,12 +54,45 @@ jobs:
           TOTAL=$(wc -l < "${ALL}")
           echo "Total non-draft releases: ${TOTAL}"
 
-          # 2. 若开启 keep_latest，计算每个机型需保留的最新 Release id（机型名 = tag 中 -immortalwrt- 之前的部分）
+          # 2. 若开启 keep_latest，计算每个机型需保留的最新 Release id
+          #    机型以 Config/*.txt 中的固件配置名为准（H5000M-qmodem、H5000M-qmodem-next、
+          #    H5000M-modem-pro、X86-qmodem……），按最长前缀匹配，避免
+          #    "H5000M-qmodem" 抢先匹配 "H5000M-qmodem-next"。
+          #    旧实现按 "-immortalwrt-" 切分：Modem Pro 的 "-VIKINGYFY-owrt-" 与
+          #    chasey-dev 的标签无法切分，每个标签会各自成组，keep-latest 形同失效。
           KEEP_IDS=""
           if [ "${KEEP_LATEST}" = "true" ]; then
-            # ALL 已按 published_at 降序排列，awk 保留每个机型首次出现的（即最新）Release id
-            KEEP_IDS=$(awk -F'\t' '{split($2,a,"-immortalwrt-"); print a[1]"\t"$1}' "${ALL}" \
-              | awk -F'\t' '!seen[$1]++{print $2}')
+            mapfile -t CONFIGS < <(
+              grep -lE '^CONFIG_TARGET_(DEVICE_[A-Za-z0-9_]+|x86)=y' Config/*.txt 2>/dev/null \
+                | xargs -r -n1 basename \
+                | sed 's/\.txt$//' \
+                | awk '{ print length($0) "\t" $0 }' | sort -rn | cut -f2-
+            )
+            if [ "${#CONFIGS[@]}" -eq 0 ]; then
+              echo "::error title=No device configs found::Config/*.txt 中未找到任何 CONFIG_TARGET_*=y 配置"
+              exit 1
+            fi
+            echo "Known configs: ${CONFIGS[*]}"
+
+            declare -A SEEN_CFG=()
+            while IFS=$'\t' read -r RID RTAG; do
+              [ -z "${RID}" ] && continue
+              CFG=""
+              for C in "${CONFIGS[@]}"; do
+                case "$RTAG" in
+                  "$C"-*) CFG="$C"; break ;;
+                esac
+              done
+              if [ -z "$CFG" ]; then
+                # 未知/历史标签：按去掉日期后缀的整串分组，宁可多保留也不误删
+                CFG="${RTAG%-[0-9][0-9].[0-9][0-9].[0-9][0-9]-*}"
+              fi
+              if [ -z "${SEEN_CFG[$CFG]:-}" ]; then
+                SEEN_CFG[$CFG]="$RID"
+                KEEP_IDS+="$RID"$'\n'
+              fi
+            done < "${ALL}"
+            KEEP_IDS="$(printf '%s' "$KEEP_IDS" | sed '/^$/d')"
             echo "Keep-latest mode: keeping $(echo "${KEEP_IDS}" | wc -w | tr -d ' ') release(s)."
           fi
 
