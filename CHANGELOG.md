@@ -1,5 +1,97 @@
 # 更新日志
 
+## [2026-10-23] QModem 六配置全链路加固：defconfig 硬断言、feed 失败即中止、Modem Pro 源头隔离
+
+### 背景
+
+对 H5000M-qmodem / H5000M-qmodem-next / AP3000M-qmodem / AP3000M-qmodem-next /
+X86-qmodem / X86-qmodem-next 六套配置做逐符号核对，并用本地 ImmortalWrt master
+（`e695009`）按 CI 同构流程（feeds install → Packages.sh QModem 段 → 配置拼接 →
+Settings.sh → defconfig）复现。确认 QModem 核心/前端/短信栈在主线上均已进固件，
+但仍存在若干「配置写了、defconfig 静默丢弃」的符号，以及 QModem feed 注册失败后
+CI 仍可能继续执行、Modem Pro 仍会克隆 QModem 仓库等问题。
+
+### 改动
+
+- `Scripts/Packages.sh`：
+  - 顶部加入 `set -e -o pipefail`。此前克隆/解包/feed 注册失败只会 `return 1`，
+    调用处继续执行，最终退出码取自末尾 `PRIVATE.sh` 判断，构建可能带缺包"成功"；
+  - `UPDATE_PACKAGE` 克隆失败、`pkg` 模式解压找不到包时输出 `::error::` 并中止；
+  - `REGISTER_QMODEM_FEED` 校验 `package/QModem` 与 `../QModem` 冲突、克隆目录、
+    feeds 配置与 `feeds update/install` 返回值，任一失败输出 `::error::` 并中止；
+  - `FIX_QMODEM_VERSION` 正则同时覆盖 `-rc.N` 与 `-rcN`；
+  - `*-modem-pro` 配置在源头跳过 QModem 克隆、feed 注册与
+    `luci-app-qmodem-generic`，避免 QModem 包元数据污染 Modem Pro 的包索引。
+- `Scripts/check_defconfig.py`（新增）：
+  - 逐符号断言：合并后请求的每个 `CONFIG_*=y` 必须在 defconfig 后仍为 `y`
+    （专门捕获 Kconfig 静默丢弃）；
+  - 变体断言：QModem 核心/通用 QMI/SEAL/Tom CM/短信栈/前端互斥/中文翻译；
+    Modem Pro 必须与 qmodem 全生态隔离且启用 `kmod-usb-net-qmi-wwan`；
+  - 机型断言：H5000M / AP3000M 设备 profile 与专有插件、X86 的 GRUB/ISO、
+    `kmod-mt76x2`、RTL8821CE/8822CE、`kmod-usb-xhci-hcd`。
+- `.github/workflows/WRT-CORE.yml`：
+  - Custom Settings 在任何模式下都加载 `GENERAL.txt`（此前 TEST 模式跳过，
+    生成的 `.config` 与实际固件相差数百符号）；
+  - defconfig 前保存 `.config.requested`，新增「Verify Config (Defconfig
+    Assertions)」步骤，失败以 `::error::` 阻断构建。
+- `Config/GENERAL.txt`：
+  - 新增 `CONFIG_PACKAGE_audio-support=y`（`kmod-sound-core` / `kmod-usb-audio`
+    的 Kconfig 门控，缺它会被静默丢弃）；
+  - 移除 `kmod-usb-xhci`（旧符号，当前只有隐藏的 `kmod-usb-xhci-hcd`，由平台
+    xHCI 驱动自动选中）；
+  - `kmod-mtd-rw` / `nand-utils` / `cpufreq` 移到 MTK 机型配置（x86 无
+    NAND/ARM 依赖，留在 GENERAL 会被丢弃）。
+- 六套 MTK 配置（H5000M/AP3000M × qmodem/qmodem-next/modem-pro）：承接上述三个
+  平台专属工具；移除错误的 `CONFIG_TARGET_MULTI_PROFILE=n`（GENERAL 后加载会
+  覆盖它，且会使 `TARGET_DEVICE_*` 不可见）。
+- `Config/X86-qmodem*.txt`：移除不存在的 `CONFIG_EFI_IMAGES`；`kmod-mt76x2e`
+  更正为实际包名 `kmod-mt76x2`；hidden 的 `kmod-rtw88/-pci/-usb` 与
+  `8821c/8822b/8822c` 改为可见设备包（8821ce/8821cu/8822be/8822bu/8822ce/
+  8822cu/8723de/8723du/8812au/8821au/8814ae/8814au），rtw89 保留可见的
+  8852ae/be/ce。
+- `Config/QMODEM*.txt` / `Config/MODEM-PRO.txt` / MTK 配置注释：按当前
+  hardware-support 实际门控范围与 Modem Pro 隔离行为改写，避免误导后续维护。
+- `.github/workflows/Auto-Clean.yml`：keep-latest 改为按 `Config/*.txt` 配置名
+  最长前缀分组（含 X86），修复 `-VIKINGYFY-owrt-` / `-chasey-dev-` 标签无法按
+  机型归组的问题；找不到配置时 `::error::` 退出。
+- `README.md` / `index.html` / `Config/OWRT-DEFAULT.txt`：H5000M 硬件更正为
+  MT7987A + MT7996E（原误写 MT7986）。
+
+### 验证
+
+本地 ImmortalWrt master `e695009`，feeds install 后执行 QModem feed 注册与
+Packages.sh，再按 CI 顺序拼接配置并 `make defconfig`，结果：
+
+| 配置 | 请求 y | defconfig 后 y | 结果 |
+|---|---:|---:|---|
+| H5000M-qmodem-next | 141 | 1125 | 通过 |
+| H5000M-qmodem | 142 | 1116 | 通过 |
+| AP3000M-qmodem-next | 150 | 1165 | 通过 |
+| AP3000M-qmodem | 151 | 1156 | 通过 |
+| X86-qmodem-next | 205 | 1321 | 通过 |
+| X86-qmodem | 206 | 1312 | 通过 |
+
+- Modem Pro 隔离回归：清空 QModem 克隆/feed 后以 `H5000M-modem-pro` 运行
+  Packages.sh，确认未重新克隆 QModem、未注册 `src-link qmodem`、
+  `package/feeds/qmodem` 不存在；随后 H5000M-modem-pro（133→1091）与
+  AP3000M-modem-pro（142→1131）defconfig 断言全部通过。
+- 负向对照：旧 H5000M 配置被检出 3 个丢弃符号 + 缺 audio-support；旧 X86
+  配置被检出 14 个丢弃符号 + 3 个驱动断言失败，证明断言能真实拦截。
+- `bash -n Scripts/Packages.sh`、`python3 -m py_compile`、两个 workflow 的
+  `yaml.safe_load` 均通过；Auto-Clean 分组用构造标签验证
+  （H5000M-qmodem-next / H5000M-qmodem / X86-qmodem 等均正确归组）。
+
+### 未执行
+
+- 未执行完整固件编译：沙箱到 GitHub 的网络不稳定，`feeds update -a` 的
+  routing/telephony/video 与部分浅克隆（openwrt-passwall 等）出现 TLS
+  超时/中断，无法完成全量 feed 与 toolchain 下载。本次结论来自真实
+  `make defconfig` 与 feed 注册实测，不等同于完整编译验证；端到端编译仍需
+  下一次 CI 运行确认。
+- CI 需要 `set -e` 后所有 Packages.sh 克隆均成功；若 GitHub 网络抖动导致
+  任一非 QModem 仓库克隆失败，现在会按设计中止并给出 `::error::`，不再
+  静默产出缺包固件。
+
 ## [2026-10-23] X86 源码固定 immortalwrt master；补充 AP3000M 双源码网口差异提醒
 
 ### 背景
