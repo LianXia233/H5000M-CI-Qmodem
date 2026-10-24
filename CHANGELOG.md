@@ -1,5 +1,53 @@
 # 更新日志
 
+## [2026-10-24] 修复 MTK-AUTO #133：find -exec 语法错误、kmod-nft-fullcone 断言误报与时区 sed 分隔符
+
+### 背景
+
+MTK-AUTO #133（`40045570266`）六个 job 的失败情况：
+
+| Job | 步骤 | 现象 |
+|---|---|---|
+| AP3000M-qmodem / -next / -modem-pro | Custom Packages | `find: missing argument to '-exec'`，退出码 1 |
+| H5000M-modem-pro | Verify Config | `CONFIG_PACKAGE_kmod-nft-fullcone: 请求 y -> 实际 <缺失>` |
+| H5000M-qmodem / -next | Compile Firmware | 编译中被取消（非代码问题） |
+
+三个 AP3000M job 的根因是 PR #24 为修 shellcheck SC2067 把
+`-exec cp -rf {} ./ \;` 改成了 `-exec cp -rf {} ./ +`。GNU find 只有在 `+`
+**紧跟** `{}` 时才把它当作 `-exec` 的结束符；中间插入 `./` 后 `+` 只是 `cp`
+的普通参数，find 遍历完所有参数仍找不到结束符，直接报错并以非零退出。
+此前没有 `set -e` 时该错误被忽略（目录实际未拷贝），加上 `set -e` 后直接中断
+Custom Packages，`luci-app-airpi-fancontrol` / `airpi-gpio-fan` 未进入
+`package/`，后续断言也无从执行。
+
+H5000M-modem-pro 的根因是符号本身在 VIKINGYFY/immortalwrt 中不存在：
+该分支用 fullconenat-sonic（内核 + firewall4 补丁，默认 `option fullcone 1`）
+实现 fullcone，树里没有 `kmod-nft-fullcone`；而 immortalwrt 主线与
+chasey-dev 分支由 `package/network/utils/fullconenat-nft` 提供该模块，且
+firewall4 自身 `DEPENDS:=+kmod-nft-fullcone`，无需显式请求。PR #24 新增的
+逐符号断言因此把它判为「静默丢弃」。
+
+### 改动
+
+- `Scripts/Packages.sh`：`UPDATE_PACKAGE` 的 `all` 分支恢复 `\;` 结束
+  `-exec`，并加注释说明 `+` 只能在紧跟 `{}` 时使用，避免再次被误"修复"。
+- `Scripts/Settings.sh`：
+  - 拼接配置后按源码树实际能力裁剪 `CONFIG_PACKAGE_kmod-nft-fullcone`：
+    在 `package/` 中找不到 `KernelPackage/nft-fullcone` 定义时从 `.config`
+    删除该请求（fullcone 由源码内置方案实现），否则保留；
+  - `zonename` 的 sed 改用 `|` 作分隔符。`WRT_ZONENAME=Asia/Shanghai` 含 `/`，
+    原先替换串未转义，sed 报 `unknown option to 's'`，时区名静默停留在 UTC。
+
+### 验证
+
+- 本地复现：`find ./repo/ -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ +`
+  输出 `missing argument to '-exec'`、退出码 1；改回 `\;` 后正常拷贝目录。
+- 用伪造的 immortalwrt / VIKINGYFY 两种 `package/` 结构验证裁剪逻辑：
+  前者保留符号，后者删除符号且 `.config` 其余内容不变。
+- 用含 `zonename='UTC'` 的样例验证新版 sed 正确写入 `Asia/Shanghai`。
+- `bash -n Scripts/Packages.sh`、`bash -n Scripts/Settings.sh` 通过。
+- 未执行完整编译：需要在下次 MTK-AUTO / WRT-BUILD 运行中确认。
+
 ## [2026-10-23] QModem 六配置全链路加固：defconfig 硬断言、feed 失败即中止、Modem Pro 源头隔离
 
 ### 背景

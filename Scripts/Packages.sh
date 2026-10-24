@@ -57,7 +57,12 @@ UPDATE_PACKAGE() {
 	elif [[ "$PKG_SPECIAL" == "name" ]]; then
 		mv -f "$REPO_NAME" "$PKG_NAME"
 	elif [[ "$PKG_SPECIAL" == "all" ]]; then
-		find "./$REPO_NAME/" -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ +
+		# 必须以 "\;" 结束 -exec：GNU find 只有在 "+" 紧跟 "{}" 时才把它当作
+		# -exec 的结束符。写成 `-exec cp -rf {} ./ +` 时 "+" 只是 cp 的普通参数，
+		# find 读完所有参数仍找不到结束符，直接报 "missing argument to `-exec'"
+		# 并以非零退出；此前没有 set -e 时该错误被忽略（目录实际没被拷贝），
+		# 现在会中断整个 Custom Packages 步骤（run #133 三个 AP3000M job 即此因）。
+		find "./$REPO_NAME/" -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ \;
 		rm -rf "./$REPO_NAME/"
 	fi
 }
