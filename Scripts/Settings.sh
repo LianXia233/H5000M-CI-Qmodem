@@ -106,13 +106,28 @@ sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $CFG_FILE
 sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" $CFG_FILE
 #修改默认时区（由 Config/OWRT-DEFAULT.txt 的 WRT_TIMEZONE / WRT_ZONENAME 驱动）
 sed -i "s/timezone='GMT0'/timezone='${WRT_TIMEZONE:-CST-8}'/g" $CFG_FILE
-sed -i "s/zonename='UTC'/zonename='${WRT_ZONENAME:-Asia\/Shanghai}'/g" $CFG_FILE
+# zonename 含 "/"（Asia/Shanghai），必须换用 | 作分隔符；否则 sed 报
+# "unknown option to `s'"，时区名静默保留为 UTC（run #133 日志中即此报错）
+sed -i "s|zonename='UTC'|zonename='${WRT_ZONENAME:-Asia/Shanghai}'|g" $CFG_FILE
 
 #配置文件修改
 echo "CONFIG_PACKAGE_luci=y" >> ./.config
 echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
+
+# ===== kmod-nft-fullcone 按源码实际能力裁剪 =====
+# 该内核模块由 immortalwrt 系源码提供（package/network/utils/fullconenat-nft，
+# 且 firewall4 自身 DEPENDS:=+kmod-nft-fullcone，两个分支都会自动编入）；
+# 但 VIKINGYFY/immortalwrt 改用 fullconenat-sonic 内核补丁实现 fullcone
+# （firewall4 默认 option fullcone 1），树里根本没有这个包。
+# 请求树中不存在的符号会被 defconfig 静默丢弃，Verify Config 直接判失败
+# （run #133 的 H5000M-modem-pro 即此因）。这里以源码树中的包定义为准：
+# 找不到 KernelPackage/nft-fullcone 就删掉请求，避免误报。
+if ! grep -rqs --include=Makefile "KernelPackage/nft-fullcone" ./package/; then
+	sed -i "/^CONFIG_PACKAGE_kmod-nft-fullcone=/d" ./.config
+	echo "kmod-nft-fullcone: 当前源码未提供该包（fullcone 由源码内置方案实现），已从请求配置移除"
+fi
 
 #引入私有扩展配置
 if [ -f "$GITHUB_WORKSPACE/Config/PRIVATE.txt" ]; then
