@@ -262,8 +262,6 @@ FIX_SINGBOX_STALE_PATCH() {
 }
 FIX_SINGBOX_STALE_PATCH
 
-UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
-
 # FAN789 插件及其他专用硬件插件
 UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "FAN789/luci-app-h5000m-fancontrol" "main"
 # AirPi AP3000M 专用（luci-app-airpi-fancontrol + airpi-gpio-fan 内核模块）：
