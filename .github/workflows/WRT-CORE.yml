@@ -325,6 +325,21 @@ jobs:
             echo "Refreshed miniupnpd patch 040-improve-logging.patch for miniupnpd 2.3.11"
           fi
 
+          # 2026-10-27 修复（run #137）：immortalwrt 上游 bc153b3d9851（Merge Official Source，
+          # 2026-10-26）把 firewall4 升级到 2026.10.26~bac1d656，旧的
+          # 001-firewall4-add-support-for-fullcone-nat.patch 失配：fw4.uc 的 8 个 hunk
+          # 中前 7 个带偏移勉强通过，hunk #8（约 2205 行起）因行号漂移 +40 且上下文行
+          # zone.dflags.helper = true 在新源码中已改为 false，超出默认 fuzz 而失败，
+          # 导致所有 immortalwrt/master 机型（4 个 qmodem job）prepare 阶段全部中断。
+          # 上游已于 21ae803cc2（2026-10-27 02:10）刷新该补丁，但本 workflow 克隆发生在
+          # 上游修复落地之前，恰好撞上竞态。该补丁仍是有效下游定制（FullCone NAT），
+          # 不能删除。用仓库内已知良好的刷新版原地替换；上游稳定后可移除本 workaround。
+          if [[ -f package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch ]]; then
+            cp -f "$GITHUB_WORKSPACE/Scripts/patches/firewall4-001-fullcone-nat-refresh.patch" \
+              package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch
+            echo "Refreshed firewall4 patch 001-firewall4-add-support-for-fullcone-nat.patch (source 2026.10.26~bac1d656)"
+          fi
+
       - name: Custom Packages
         run: |
           cd ./wrt/package/
