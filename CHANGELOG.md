@@ -1,5 +1,63 @@
 # 更新日志
 
+## [2026-10-28] UPnP 插件改用 VIKINGYFY/packages 源（miniupnpd + luci-app-upnp）
+
+### 背景
+
+上游 VIKINGYFY/OpenWRT-CI 于 2026-10-27 把 `miniupnpd` 与 `luci-app-upnp`
+纳入其 `VIKINGYFY/packages` 仓库，并在 viking 包组中启用。本仓库同步该
+做法，UPnP（IGD / PCP / NAT-PMP 端口自动映射）改用同一维护源，与上游
+保持一致的版本节奏与补丁基线。
+
+**未涉及主题**：本仓库默认主题仍为 aurora（`Config/OWRT-DEFAULT.txt` 的
+`WRT_THEME=aurora`、`Packages.sh` 的 aurora / aurora-config 源、
+`Handles.sh` 的 aurora 菜单样式修复均原样保留），本次不做主题相关改动。
+
+### 改动
+
+- `Scripts/Packages.sh`：viking 包组清理名单追加 `miniupnpd`、
+  `luci-app-upnp`：
+
+  ```diff
+  -UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
+  +UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupnpd sing-box luci-app-homeproxy luci-app-timewol luci-app-upnp luci-app-wolplus luci-app-wolultra"
+  ```
+
+  该名单在克隆前会 `rm -rf` 掉 `../feeds/luci/`、`../feeds/packages/` 下所有
+  名字匹配的目录，因此 immortalwrt feeds 自带的 `miniupnpd` /
+  `luci-app-upnp` 会被清除，改用 viking 源。
+
+### 说明
+
+- 编译配置无需改动：`Config/GENERAL.txt` 已有
+  `CONFIG_PACKAGE_luci-app-upnp=y`（在「新增实用插件」区块内），且各机型
+  均会叠加 GENERAL.txt；
+- `miniupnpd` 不需要单独选中：`luci-app-upnp` 的
+  `LUCI_DEPENDS:=+luci-base +miniupnpd +rpcd-mod-ucode` 会自动带出；
+  viking 源的 `miniupnpd` 用 `PROVIDES:=miniupnpd` + `DEFAULT_VARIANT:=1`
+  定义两个变体（`miniupnpd-iptables` / `miniupnpd-nftables`），依赖
+  `+miniupnpd` 会解析到默认的 **nftables 变体**，与本仓库使用
+  `CONFIG_PACKAGE_kmod-nft-*`（firewall4）的栈一致；
+- 版本约束自洽：`luci-app-upnp` 的
+  `LUCI_EXTRA_DEPENDS:=miniupnpd (>=20261027-r7)` 与同源 `miniupnpd` 的
+  `PKG_VERSION:=20261027` / `PKG_RELEASE:=7` 完全吻合，不会在 world 安装
+  阶段因约束不满足而失败（与 homeproxy 的 sing-box ≥1.15.0 那类问题同构，
+  此处不存在）；
+- 与现有 feed 补丁修复的兼容：`WRT-CORE.yml` 的「Update Feeds」步骤中有三处
+  针对 immortalwrt feeds 的 `feeds/packages/net/miniupnpd/patches/` 修复
+  （移除 020 / 030、用 `Scripts/patches/miniupnpd-040-improve-logging-2.3.11.patch`
+  替换 040）。这些步骤均带 `-f` 守卫，而本改动会在后续「Custom Packages」
+  阶段删除整个 feeds miniupnpd 目录，故它们自动退化为 no-op，**不会报错、
+  无需删除**，作为以后切回 feeds 源时的保险保留；
+- viking 源的 `miniupnpd/patches/` 仅含 `010-upnp-igdv2-compat.patch` 与
+  `900-miniupnpd-format-xml-to-make-some-app-happy.patch`，正是 CHANGELOG
+  [2026-10-18] 条目中已独立复验「补丁链整链通过」的两个，不会复现 2.3.11
+  那次的补丁失配中断；
+- 配置硬断言（`Scripts/check_defconfig.py` 的 `check_requested`）会校验
+  `.config.requested` 中每个 `=y` 符号在 defconfig 后仍为 y；本改动下
+  `CONFIG_PACKAGE_luci-app-upnp=y` 仍可满足（包已就位、版本约束吻合），
+  不会触发「配置被 defconfig 静默丢弃」报错。
+
 ## [2026-10-24] 修复 MTK-AUTO #133：find -exec 语法错误、kmod-nft-fullcone 断言误报与时区 sed 分隔符
 
 ### 背景
