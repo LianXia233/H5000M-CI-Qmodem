@@ -325,20 +325,17 @@ jobs:
             echo "Refreshed miniupnpd patch 040-improve-logging.patch for miniupnpd 2.3.11"
           fi
 
-          # 2026-10-27 修复（run #137）：immortalwrt 上游 bc153b3d9851（Merge Official Source，
-          # 2026-10-26）把 firewall4 升级到 2026.10.26~bac1d656，旧的
-          # 001-firewall4-add-support-for-fullcone-nat.patch 失配：fw4.uc 的 8 个 hunk
-          # 中前 7 个带偏移勉强通过，hunk #8（约 2205 行起）因行号漂移 +40 且上下文行
-          # zone.dflags.helper = true 在新源码中已改为 false，超出默认 fuzz 而失败，
-          # 导致所有 immortalwrt/master 机型（4 个 qmodem job）prepare 阶段全部中断。
-          # 上游已于 21ae803cc2（2026-10-27 02:10）刷新该补丁，但本 workflow 克隆发生在
-          # 上游修复落地之前，恰好撞上竞态。该补丁仍是有效下游定制（FullCone NAT），
-          # 不能删除。用仓库内已知良好的刷新版原地替换；上游稳定后可移除本 workaround。
-          if [[ -f package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch ]]; then
-            cp -f "$GITHUB_WORKSPACE/Scripts/patches/firewall4-001-fullcone-nat-refresh.patch" \
-              package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch
-            echo "Refreshed firewall4 patch 001-firewall4-add-support-for-fullcone-nat.patch (source 2026.10.26~bac1d656)"
-          fi
+          # 2026-10-31 修复（run #140）：2026-10-27 针对 firewall4
+          # 2026.10.26~bac1d656 加的"仓库内刷新版补丁替换"workaround 在上游把
+          # firewall4 升级到 2026.10.29~e6f600c4 后反向成了破坏源：上游已随版本
+          # 同步刷新 001-firewall4-add-support-for-fullcone-nat.patch（parse_policy
+          # 枚举新增 "npt"，行号整体后移），而仓库内固定在 bac1d656 的旧快照
+          # hunk #5（"fullcone" 策略插入点）上下文失配（FAILED at 1543），两个
+          # x86 job 全部在 prepare 阶段中断。已验证上游补丁对 e6f600c4 可干净
+          # 套用（patch --dry-run 全部通过），按既定计划移除本 workaround，
+          # 直接使用 feed 内随版本同步维护的补丁，避免再次漂移。
+          # 若未来再次撞上上游"版本升级与补丁刷新未同 commit 落地"的竞态，
+          # 参照 git 历史 6292c2d2 的做法临时替换，并同样注明移除条件。
 
       - name: Custom Packages
         run: |

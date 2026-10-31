@@ -1,5 +1,39 @@
 # 更新日志
 
+## [2026-10-31] 移除 firewall4 fullcone 补丁替换 workaround（上游已同步刷新）
+
+### 背景
+
+run #137（2026-10-27）时 immortalwrt 上游把 firewall4 升级到
+2026.10.26~bac1d656，feed 内的 001-firewall4-add-support-for-fullcone-nat.patch
+短暂失配，于是 6292c2d2 引入了"用仓库内已知良好刷新版原地替换"的 workaround
+（`.github/workflows/WRT-CORE.yml` Update Feeds 步骤）。
+
+2026-10-31 上游（Merge Official Source）把 firewall4 再次升级到
+2026.10.29~e6f600c4，并已随版本同步刷新了该补丁：`parse_policy` 枚举在
+`"masquerade"` 后新增 `"npt"`，行号整体后移。而仓库内固定基于 bac1d656 的
+旧快照未随之更新，hunk #5（插入 `"fullcone"` 策略处）的上下文失配，
+`patch` 报 `Hunk #5 FAILED at 1543`，整个 prepare 阶段中断——
+run 41149352961 的 X86-qmodem / X86-qmodem-next 两个 job 全部
+在 Compile Firmware 步骤失败。workaround 从保护项变成了破坏源。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：删除 firewall4 补丁替换 workaround，
+  恢复直接使用 feed 内随版本同步维护的补丁；原位留有说明注释与
+  竞态复现时的处置参照。
+- `Scripts/patches/firewall4-001-fullcone-nat-refresh.patch`：删除。
+  已无引用，且固定版本快照必然随上游演进失效，保留只会误导。
+
+### 验证
+
+- `git.openwrt.org/project/firewall4.git` 于
+  e6f600c458bda7bc2d87b07e78fd06b50c9d7131 检出后 `patch -p1 --dry-run`
+  应用 immortalwrt master 当前补丁：4 个文件全部通过（exit 0）；
+  应用仓库内旧快照则复现 CI 同款 `Hunk #5 FAILED at 1543`（exit 1），
+  证实移除方向正确。
+- 推送后触发 OWRT-ALL（workflow_dispatch）验证编译恢复。
+
 ## [2026-10-30] 修复 homeproxy ucode 模块导出缺失（hasForceProxyRules）
 
 ### 背景
