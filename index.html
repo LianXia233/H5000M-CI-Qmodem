@@ -105,7 +105,7 @@
       position: fixed;
       inset: -32px;
       z-index: -2;
-      background-image: url('assets/wallpaper.jpg');
+      background-image: url('https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg');
       background-size: cover;
       background-position: center center;
       background-repeat: no-repeat;
@@ -1323,9 +1323,172 @@
       .search-input-wrap { max-width: 100%; width: 100%; }
       .floating-tools { bottom: 16px; right: 16px; }
     }
+  
+    /* 纯享壁纸模式 (Zen Mode) */
+    body.zen-mode .main-content-flow {
+      opacity: 0 !important;
+      pointer-events: none;
+      transform: scale(0.98);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    body.zen-mode .bg-backdrop-veil {
+      background: rgba(0, 0, 0, 0.02) !important;
+    }
+    body.zen-mode #zenExitHint {
+      display: flex !important;
+    }
+
+    /* 浮动壁纸控制面板 */
+    .wallpaper-control-panel {
+      position: fixed;
+      top: 76px;
+      right: 20px;
+      z-index: 200;
+      width: 320px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(15, 23, 42, 0.05);
+      padding: 18px;
+    }
+    .wallpaper-control-panel.hidden {
+      display: none !important;
+    }
+    @media (max-width: 640px) {
+      .wallpaper-control-panel {
+        left: 12px;
+        right: 12px;
+        width: auto;
+        top: 68px;
+      }
+    }
+
+    /* 增强 Tab Pills 在 PC 和手机端的排版 */
+    .tab-pills {
+      display: flex;
+      background: #f1f5f9;
+      padding: 4px;
+      border-radius: 12px;
+      gap: 6px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      box-sizing: border-box;
+    }
+    .tab-pills::-webkit-scrollbar {
+      display: none;
+    }
+    .tab-pill {
+      border: 1px solid transparent;
+      background: transparent;
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-height: 40px;
+    }
+    .tab-pill:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.6);
+    }
+    .tab-pill.active {
+      background: #ffffff;
+      color: var(--primary);
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.14), 0 1px 3px rgba(0, 0, 0, 0.05);
+      font-weight: 700;
+      border-color: rgba(2, 132, 199, 0.2);
+    }
+    @media (min-width: 768px) {
+      #deviceFilter.tab-pills,
+      #variantFilter.tab-pills {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        width: 100%;
+      }
+      #mirrorSelector.tab-pills {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        width: 100%;
+      }
+      .tab-pill {
+        flex-shrink: 1;
+        width: 100%;
+      }
+    }
+    @media (max-width: 767px) {
+      .tab-scroll-hint {
+        display: flex !important;
+      }
+    }
+    .tab-scroll-hint {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-light);
+      margin-top: 4px;
+      padding: 0 4px;
+    }
+
   </style>
 </head>
 <body data-overlay="standard">
+
+  <!-- 纯享壁纸退出提示 (Zen Mode) -->
+  <div id="zenExitHint" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; cursor:pointer; background:rgba(0,0,0,0.1); backdrop-filter:blur(1px);" onclick="toggleZenMode()">
+    <div style="background:rgba(255,255,255,0.92); padding:12px 24px; border-radius:30px; display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; color:#0f172a; box-shadow:0 20px 40px rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.9);">
+      <span style="width:10px; height:10px; border-radius:50%; background:#22c55e;"></span>
+      🖼️ 正在纯享高清壁纸 · 单击屏幕任意处或按 ESC 恢复
+    </div>
+  </div>
+
+  <!-- 浮动壁纸控制面板 -->
+  <div id="wallpaperControlPanel" class="wallpaper-control-panel hidden">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; margin-bottom:12px; border-bottom:1px solid rgba(226,232,240,0.8);">
+      <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; color:#0f172a;">
+        <span>🎛️</span>
+        <span>壁纸透视与毛玻璃调节</span>
+      </div>
+      <button id="closeWallpaperPanel" style="border:none; background:transparent; font-size:20px; color:#94a3b8; cursor:pointer; line-height:1; padding:2px;">&times;</button>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#475569; margin-bottom:6px;">
+          <span>卡片透光度 (壁纸可见度)</span>
+          <span id="opacityValLabel" style="font-family:monospace; color:#0284c7; font-weight:700;">88%</span>
+        </div>
+        <input type="range" id="opacitySlider" min="40" max="96" value="88" style="width:100%; height:6px; accent-color:#0284c7; cursor:pointer;">
+        <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:4px;">
+          <span>超通透 (40%)</span>
+          <span>平衡 (88%)</span>
+          <span>实白 (96%)</span>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#475569; margin-bottom:6px;">
+          <span>背景微虚化 (景深感)</span>
+          <span id="blurValLabel" style="font-family:monospace; color:#0284c7; font-weight:700;">0 px</span>
+        </div>
+        <input type="range" id="blurSlider" min="0" max="10" value="0" step="1" style="width:100%; height:6px; accent-color:#0284c7; cursor:pointer;">
+      </div>
+      <button onclick="toggleZenMode()" style="width:100%; padding:10px; border-radius:12px; background:linear-gradient(135deg, #0284c7, #6366f1); border:none; color:#ffffff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(2,132,199,0.25);">
+        <span>🖼️</span> 一键纯享全屏壁纸
+      </button>
+    </div>
+  </div>
+
 
   <!-- Fixed background veil over original uncompressed wallpaper -->
   <div class="bg-backdrop-veil" id="bgVeil"></div>
@@ -1360,6 +1523,17 @@
         </ul>
 
         <div class="nav-actions">
+
+          <!-- 壁纸控制抽屉开关 -->
+          <button id="toggleWallpaperMenu" title="调节壁纸透视与毛玻璃" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+            <span class="hidden-xs">壁纸</span>
+          </button>
+          <!-- 一键纯享壁纸 -->
+          <button id="btnZenMode" title="一键纯享壁纸" class="btn btn-secondary btn-sm" onclick="toggleZenMode()" style="display:inline-flex; align-items:center; gap:6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+
           <button class="btn btn-secondary btn-sm" onclick="copyRouterIp()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             192.168.10.1
@@ -1390,7 +1564,7 @@
   </div>
 
   <!-- Main Content -->
-  <main class="container">
+  <div class="main-content-flow"><main class="container">
 
     <!-- Hero Section -->
     <section class="hero">
@@ -1511,6 +1685,7 @@
                 机型筛选:
               </span>
               <div class="tab-pills" id="deviceFilter">
+                <!-- 移动端横滑提示 -->
                 <button class="tab-pill active" onclick="filterDevice('all', this)">全部机型</button>
                 <button class="tab-pill" onclick="filterDevice('H5000M', this)">H5000M (5G CPE)</button>
                 <button class="tab-pill" onclick="filterDevice('AP3000M', this)">AP3000M (WiFi6 路由)</button>
@@ -1522,6 +1697,7 @@
             <div class="control-group">
               <span class="control-label">前端版本:</span>
               <div class="tab-pills" id="variantFilter">
+                <!-- 移动端横滑提示 -->
                 <button class="tab-pill active" onclick="filterVariant('all', this)">全部</button>
                 <button class="tab-pill" onclick="filterVariant('next', this)">QModem Next (现代 JS)</button>
                 <button class="tab-pill" onclick="filterVariant('classic', this)">QModem (传统 LuCI)</button>
@@ -2100,7 +2276,7 @@
         背景壁纸保持原画无压缩渲染 · 主题白色轻透质感 · 兼容全平台 PC 与移动端浏览
       </p>
     </div>
-  </footer>
+  </footer></div>
 
   <!-- Core JavaScript Logic -->
   <script>
@@ -2282,6 +2458,9 @@
 
     // --- Mirror Switcher ---
     function setMirror(mirror, el) {
+      if (el && el.scrollIntoView) {
+        el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
       currentMirror = mirror;
       document.querySelectorAll('#mirrorSelector .tab-pill').forEach(btn => btn.classList.remove('active'));
       el.classList.add('active');
@@ -2306,6 +2485,9 @@
 
     // --- Filter Handlers ---
     function filterDevice(dev, el) {
+      if (el && el.scrollIntoView) {
+        el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
       currentDeviceFilter = dev;
       document.querySelectorAll('#deviceFilter .tab-pill').forEach(btn => btn.classList.remove('active'));
       el.classList.add('active');
@@ -2313,6 +2495,9 @@
     }
 
     function filterVariant(variant, el) {
+      if (el && el.scrollIntoView) {
+        el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
       currentVariantFilter = variant;
       document.querySelectorAll('#variantFilter .tab-pill').forEach(btn => btn.classList.remove('active'));
       el.classList.add('active');
@@ -2630,6 +2815,64 @@
       // Try to silently fetch latest releases from GitHub in background
       setTimeout(fetchLiveReleases, 800);
     });
+  
+    // --- Wallpaper Control Panel Logic ---
+    const toggleWallpaperMenu = document.getElementById('toggleWallpaperMenu');
+    const wallpaperControlPanel = document.getElementById('wallpaperControlPanel');
+    const closeWallpaperPanel = document.getElementById('closeWallpaperPanel');
+    const opacitySlider = document.getElementById('opacitySlider');
+    const opacityValLabel = document.getElementById('opacityValLabel');
+    const blurSlider = document.getElementById('blurSlider');
+    const blurValLabel = document.getElementById('blurValLabel');
+
+    if (toggleWallpaperMenu && wallpaperControlPanel) {
+      toggleWallpaperMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        wallpaperControlPanel.classList.toggle('hidden');
+      });
+      if (closeWallpaperPanel) {
+        closeWallpaperPanel.addEventListener('click', () => {
+          wallpaperControlPanel.classList.add('hidden');
+        });
+      }
+      document.addEventListener('click', (e) => {
+        if (!wallpaperControlPanel.contains(e.target) && e.target !== toggleWallpaperMenu) {
+          wallpaperControlPanel.classList.add('hidden');
+        }
+      });
+    }
+
+    if (opacitySlider) {
+      opacitySlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        const dec = (val / 100).toFixed(2);
+        document.documentElement.style.setProperty('--bg-glass', `rgba(255, 255, 255, ${dec})`);
+        document.documentElement.style.setProperty('--bg-glass-card', `rgba(255, 255, 255, ${dec})`);
+        document.documentElement.style.setProperty('--bg-solid', `rgba(255, 255, 255, ${Math.min(0.98, dec * 1.05)})`);
+        opacityValLabel.textContent = `${val}%`;
+      });
+    }
+
+    if (blurSlider) {
+      blurSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        document.documentElement.style.setProperty('--wallpaper-blur', `${val}px`);
+        blurValLabel.textContent = `${val} px`;
+      });
+    }
+
+    // --- Zen Mode Toggle ---
+    function toggleZenMode() {
+      document.body.classList.toggle('zen-mode');
+      if (wallpaperControlPanel) wallpaperControlPanel.classList.add('hidden');
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('zen-mode')) {
+        document.body.classList.remove('zen-mode');
+      }
+    });
+
   </script>
 </body>
 </html>
