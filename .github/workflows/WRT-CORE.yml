@@ -581,6 +581,14 @@ jobs:
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
 
+            # 过滤非固件小文件：mediatek 目标编译时会把 mt798x-ram-*-bl2 等
+            # DDR 引导辅助 bin（<1MB，仅供开发者二次拼包，不可直接刷写）输出到
+            # bin/targets，上面的兜底搬运会把它带进 upload。真正的固件 bin 都是
+            # 几十 MB 的 sysupgrade / factory / kernel 镜像，按「.bin 且小于 2MB
+            # 即非固件」过滤，Release 页面只保留正常固件与 Config / manifest
+            # 等文本辅助文件。-print 把被删文件记进日志，便于事后核对。
+            find ./upload/ -type f -iname "*.bin" -size -2M -print -delete
+
             make clean -j$(nproc)
           fi
 
