@@ -41,9 +41,12 @@ WRT_PW=无
 # 格式：仅限字母、数字、下划线、连字符
 WRT_NAME=OWRT
 
-# 默认 Web 主题（需已在编译配置中启用对应的 luci-theme-* 与 luci-app-*-config）
-# 可选项：aurora（默认）/ argon / material / bootstrap 等
-WRT_THEME=aurora
+# 默认 Web 主题（对应主题需在 Scripts/Packages.sh 中已克隆，且 Scripts/Settings.sh
+# 里有配套包映射；未编入的主题会被默认主题种子脚本跳过）
+# 可选项：vantage（默认，anothaDev/luci-theme-vantage）/ aurora / argon / material / bootstrap 等
+# 注：Aurora 仍会随固件编入（含 luci-app-aurora-config），只是不再默认，
+#     可在「系统 → 语言和界面」中随时切换
+WRT_THEME=vantage
 
 
 # ============================== Wi-Fi 无线 ==============================

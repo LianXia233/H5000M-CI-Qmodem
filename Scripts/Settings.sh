@@ -114,7 +114,61 @@ sed -i "s|zonename='UTC'|zonename='${WRT_ZONENAME:-Asia/Shanghai}'|g" $CFG_FILE
 echo "CONFIG_PACKAGE_luci=y" >> ./.config
 echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
-echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
+
+# ===== 主题配套包 =====
+# 默认主题由 WRT_THEME 决定（当前 vantage）；luci-theme-bootstrap 已在脚本开头被
+# 替换成 luci-theme-$WRT_THEME，故未安装的主题不会抢占默认样式。
+# 各主题的配套包名并不统一（aurora → luci-app-aurora-config、vantage →
+# luci-app-vantage 仪表盘、argon → luci-app-argon-config），无脑拼
+# luci-app-$WRT_THEME-config 会写出不存在的符号；这类符号在 defconfig 阶段被
+# 静默丢弃，直接触发 check_defconfig.py 的「请求 y 却未生效」硬断言（构建失败）。
+THEME_PKG=""
+case "$WRT_THEME" in
+	aurora)  THEME_PKG="luci-app-aurora-config" ;;
+	vantage) THEME_PKG="luci-app-vantage" ;;
+	argon)   THEME_PKG="luci-app-argon-config" ;;
+esac
+if [ -n "$THEME_PKG" ]; then
+	echo "CONFIG_PACKAGE_$THEME_PKG=y" >> ./.config
+fi
+
+# Aurora 保留为可选主题（编入固件但不再默认），可在「系统 → 语言和界面」切回
+if [ "$WRT_THEME" != "aurora" ]; then
+	echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> ./.config
+	echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> ./.config
+fi
+
+# ===== 默认主题种子（首启动 uci-defaults）=====
+# 集合依赖换成 luci-theme-$WRT_THEME 只能保证「该主题被安装」，无法保证
+# /etc/config/luci 的 mediaurlbase 指向它：该文件是 conffile，sysupgrade 保留旧
+# 配置时仍写着上一代默认（/luci-static/aurora），而主题包自带的 30_luci-theme-*
+# 脚本只在 luci.themes.<Name> 首次注册时才写 mediaurlbase，升级路径不会切换。
+# 这里生成一个排在 30_* 之后执行的种子脚本：
+#   - 主题目录不存在（未编入）则不动配置，避免留下坏路径；
+#   - 用 luci.main.theme_seeded 记录已种子过的默认主题，同一代主题只种一次，
+#     用户此后在 LuCI 里改的主题不会被每次升级重置；日后更换默认主题时该值
+#     不等，种子脚本会重新生效。
+THEME_SEED_DIR="./files/etc/uci-defaults"
+mkdir -p "$THEME_SEED_DIR"
+THEME_NAME="$(printf '%s' "${WRT_THEME:0:1}" | tr '[:lower:]' '[:upper:]')${WRT_THEME:1}"
+cat > "$THEME_SEED_DIR/40-luci-default-theme" <<EOF
+#!/bin/sh
+# 出厂默认主题：构建时由 Scripts/Settings.sh 依据 WRT_THEME 生成，勿手改
+THEME='$WRT_THEME'
+THEME_NAME='$THEME_NAME'
+
+[ -n "\$THEME" ] || exit 0
+[ -d "/www/luci-static/\$THEME" ] || exit 0
+[ "\$(uci -q get luci.main.theme_seeded)" = "\$THEME" ] && exit 0
+
+uci -q set "luci.themes.\$THEME_NAME=/luci-static/\$THEME"
+uci -q set luci.main.mediaurlbase="/luci-static/\$THEME"
+uci -q set luci.main.theme_seeded="\$THEME"
+uci -q commit luci
+exit 0
+EOF
+chmod +x "$THEME_SEED_DIR/40-luci-default-theme"
+echo "default theme seeded: $WRT_THEME"
 
 # ===== kmod-nft-fullcone 按源码实际能力裁剪 =====
 # 该内核模块由 immortalwrt 系源码提供（package/network/utils/fullconenat-nft，

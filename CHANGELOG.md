@@ -1,5 +1,73 @@
 # 更新日志
 
+## [2026-10-31] 默认主题切换为 luci-theme-vantage（Aurora 保留为可选）
+
+### 背景
+
+上游 VIKINGYFY/OpenWRT-CI 已把默认主题从 aurora 改为 `anothaDev/luci-theme-vantage`
+（`WRT_THEME: vantage`）。本仓库同步该做法：默认主题改为 vantage，同时**不删除**
+Aurora——`luci-theme-aurora` 与 `luci-app-aurora-config` 继续编入固件，只是不再占用
+默认样式，用户可在「系统 → 语言和界面」随时切回。
+
+这里有一个与"直接改一行 WRT_THEME"不同的地方：上游切主题时并没有保留旧主题，
+本仓库要保留 Aurora，于是多出两个必须显式处理的问题。
+
+1. **配套包名不统一**。原脚本固定拼 `CONFIG_PACKAGE_luci-app-$WRT_THEME-config`，
+   对 aurora 成立（`luci-app-aurora-config`），对 vantage 是
+   `luci-app-vantage-config`——该包不存在。`.config` 中不存在的符号会被 defconfig
+   静默丢弃，随即触发 `Scripts/check_defconfig.py` 的「请求 y 却未生效」硬断言，
+   构建在 Verify Config 步骤直接失败。
+2. **默认样式并非由集合依赖唯一决定**。脚本开头把
+   `feeds/luci/collections/*/Makefile` 里的 `luci-theme-bootstrap` 换成
+   `luci-theme-$WRT_THEME`，只能保证「该主题被安装」。真正决定默认样式的是
+   `/etc/config/luci` 的 `luci.main.mediaurlbase`，而它是 conffile：sysupgrade 保留
+   旧配置时该值仍是 `/luci-static/aurora`。主题包自带的
+   `30_luci-theme-*` 脚本只在 `luci.themes.<Name>` 首次注册时才写 mediaurlbase，
+   对"升级上来的设备"完全不生效。
+
+### 变更
+
+- `Scripts/Packages.sh`：新增 `UPDATE_PACKAGE "vantage" "anothaDev/luci-theme-vantage"
+  "main"`。该仓库根目录不是包，内含 `luci-theme-vantage/`（主题）与
+  `luci-app-vantage/`（仪表盘）两个子目录，克隆到 `package/luci-theme-vantage` 后
+  由 buildroot 递归扫描注册，与 argon 的多包仓库同一形态。aurora / aurora-config
+  两行保持不变。
+- `Scripts/Settings.sh`：
+  - 主题配套包改为白名单映射（aurora → `luci-app-aurora-config`、
+    vantage → `luci-app-vantage`、argon → `luci-app-argon-config`），不再盲拼
+    `-config` 后缀，杜绝写出不存在的符号。
+  - `WRT_THEME != aurora` 时追加 `luci-theme-aurora` + `luci-app-aurora-config`，
+    把 Aurora 作为可选主题保留在固件里。
+  - 新增「默认主题种子」段：构建期生成
+    `files/etc/uci-defaults/40-luci-default-theme`，其文件名字典序排在
+    `30_luci-theme-*` 之后，首启动时把 `luci.main.mediaurlbase` 指向
+    `/luci-static/$WRT_THEME`，并以 `luci.main.theme_seeded` 记录已种子的默认主题
+    ——同一代主题只种一次，用户此后自选的主题不会被每次升级重置；日后再次更换
+    默认主题时该值不等，种子会重新生效。主题目录不存在（未编入）时脚本直接退出，
+    不会在配置里留下坏路径。
+- `Scripts/Handles.sh`：新增 vantage 进度条标签字体修复
+  （`anothaDev/luci-theme-vantage#52`，与上游 CI 同一 sed 表达式）：把
+  `.cbi-progressbar::before` 的
+  `font: 500 var(--fs-micro)/1.2 var(--mono)` 改为 `font: inherit; line-height: normal`，
+  避免取值标签用等宽字体在窄屏/中文下被截断。补丁前先统计目标串出现次数，命中与否
+  都写入日志，上游若已自行修正则自动跳过而不是静默"假修复"。
+- `Config/OWRT-DEFAULT.txt`：`WRT_THEME=aurora` → `vantage`，并注明 Aurora 仍编入
+  固件、仅不再默认。
+
+### 验证
+
+- Settings.sh 主题段在三组 `WRT_THEME` 下实跑（隔离目录，仅取该段代码）：
+  `vantage` → `luci-theme-vantage` + `luci-app-vantage` + `luci-theme-aurora` +
+  `luci-app-aurora-config`；`aurora` → 与改动前完全一致（两项，无重复）；
+  `argon` → `luci-theme-argon` + `luci-theme-aurora` + `luci-app-aurora-config`。
+- 种子脚本用桩 `uci` + 临时 `www/luci-static` 复现三种情形：未种子 → 依次
+  `set luci.themes.Vantage` / `mediaurlbase` / `theme_seeded` 并 commit；
+  已种子 vantage → 无任何写操作；主题未编入 → 无任何写操作。
+- vantage CSS 补丁对本仓库当前上游（v1.0.11）`vantage.css` 做 dry-run：
+  仅第 2673 行 `font:` 一行被替换，其余零改动。
+- `luci-app-vantage` 依赖 `luci-base`、`rpcd`、`rpcd-mod-iwinfo`、`rpcd-mod-ucode`、
+  `ucode-mod-{uci,ubus,fs}`，均为 immortalwrt 现成包，不引入新的构建期编译。
+
 ## [2026-10-31] 移除 firewall4 fullcone 补丁替换 workaround（上游已同步刷新）
 
 ### 背景

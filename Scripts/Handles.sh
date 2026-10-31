@@ -265,6 +265,28 @@ if [ -d "$PKG_PATH/luci-app-aurora-config" ]; then
 	fi
 fi
 
+#修改vantage进度条标签字体（anothaDev/luci-theme-vantage#52）
+# 进度条取值标签沿用 --mono 等宽字体，中文/窄屏下字宽撑不开而被截断；
+# 上游尚未合并修复，这里把该条 font 规则改为继承正文字体（与上游 CI 同一改法）。
+# 仅当 CSS 仍为旧写法时命中，上游若已修正则自然跳过；命中与否都以日志说明，
+# 避免"静默没改"被误当成已修复。
+VANTAGE_CSS="$(find "$PKG_PATH/luci-theme-vantage" -maxdepth 8 -type f \
+	-path '*/htdocs/luci-static/vantage/vantage.css' -print -quit 2>/dev/null)"
+if [ -n "$VANTAGE_CSS" ]; then
+	echo " "
+	VANTAGE_BEFORE="$(grep -c 'font: inherit; line-height: normal;' "$VANTAGE_CSS" || true)"
+	sed -i -e '/^\/\* progress bars: thin track/,$ { /^\.cbi-progressbar::before {/,/^}/ { s/^[[:space:]]*font: 500 var(--fs-micro)\/1\.2 var(--mono);/\tfont: inherit; line-height: normal;/; } }' \
+		"$VANTAGE_CSS"
+	VANTAGE_AFTER="$(grep -c 'font: inherit; line-height: normal;' "$VANTAGE_CSS" || true)"
+	if [ "${VANTAGE_AFTER:-0}" -gt "${VANTAGE_BEFORE:-0}" ]; then
+		echo "theme-vantage progress label font has been fixed!"
+	elif [ "${VANTAGE_AFTER:-0}" -gt 0 ]; then
+		echo "theme-vantage progress label font already patched, skip!"
+	else
+		echo "theme-vantage progress label rule not matched (upstream CSS changed?), continuing!"
+	fi
+fi
+
 #修改mini-diskmanager菜单位置
 DISKMAN_JSON="$(find "$PKG_PATH/luci-app-mini-diskmanager" -maxdepth 4 -type f -path '*/luci-app-mini-diskmanager/root/usr/share/luci/menu.d/luci-app-mini-diskmanager.json' -print -quit 2>/dev/null)"
 if [ -n "$DISKMAN_JSON" ]; then
