@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+
+  <script>
+    // 两种高品质壁纸随机加载引擎
+    const WALLPAPERS = [
+      'https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg',
+      'https://files.seeusercontent.com/2026/06/29/uu4H/bg1.jpg'
+    ];
+    (function() {
+      const chosen = WALLPAPERS[Math.floor(Math.random() * WALLPAPERS.length)];
+      document.documentElement.style.setProperty('--wallpaper-url', "url('" + chosen + "')");
+      window.currentWallpaperUrl = chosen;
+    })();
+  </script>
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>H5000M & AP3000M & x86 · ImmortalWrt 定制固件发布中心</title>
@@ -105,7 +119,7 @@
       position: fixed;
       inset: -32px;
       z-index: -2;
-      background-image: url('https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg');
+      background-image: var(--wallpaper-url, url('https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg'));
       background-size: cover;
       background-position: center center;
       background-repeat: no-repeat;
@@ -1483,7 +1497,27 @@
         </div>
         <input type="range" id="blurSlider" min="0" max="10" value="0" step="1" style="width:100%; height:6px; accent-color:#0284c7; cursor:pointer;">
       </div>
-      <button onclick="toggleZenMode()" style="width:100%; padding:10px; border-radius:12px; background:linear-gradient(135deg, #0284c7, #6366f1); border:none; color:#ffffff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(2,132,199,0.25);">
+      
+        <!-- 两种精美壁纸切换与随机按钮 -->
+        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:600; color:#64748b;">
+            <span>随机/指定壁纸</span>
+            <span id="currentWallpaperLabel" style="color:#0284c7; font-weight:700;">二次元主视觉</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+            <button type="button" onclick="switchWallpaper(0)" id="wpBtn0" style="padding:7px 10px; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; font-size:11px; font-weight:700; color:#0f172a; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 2px 5px rgba(0,0,0,0.05); transition:all 0.2s;">
+              <span>🌸</span> 二次元视觉
+            </button>
+            <button type="button" onclick="switchWallpaper(1)" id="wpBtn1" style="padding:7px 10px; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; font-size:11px; font-weight:700; color:#0f172a; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 2px 5px rgba(0,0,0,0.05); transition:all 0.2s;">
+              <span>🌊</span> 经典蔚蓝
+            </button>
+          </div>
+          <button type="button" onclick="switchWallpaper()" style="width:100%; padding:7px 10px; border-radius:10px; border:1px solid #e2e8f0; background:#f8fafc; font-size:11px; font-weight:600; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s;">
+            <span>🎲</span> 随机换另一张壁纸
+          </button>
+        </div>
+
+        <button onclick="toggleZenMode()" style="width:100%; padding:10px; border-radius:12px; background:linear-gradient(135deg, #0284c7, #6366f1); border:none; color:#ffffff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(2,132,199,0.25);">
         <span>🖼️</span> 一键纯享全屏壁纸
       </button>
     </div>
@@ -2873,6 +2907,61 @@
       }
     });
 
-  </script>
+  
+
+    // --- 动态壁纸随机/手动切换引擎 ---
+    function updateWallpaperUI() {
+      const isWp1 = window.currentWallpaperUrl && window.currentWallpaperUrl.includes('145952531');
+      const label = document.getElementById('currentWallpaperLabel');
+      if (label) {
+        label.textContent = isWp1 ? '二次元主视觉 (p1)' : '经典蔚蓝原画 (bg1)';
+      }
+      const btn0 = document.getElementById('wpBtn0');
+      const btn1 = document.getElementById('wpBtn1');
+      if (btn0 && btn1) {
+        if (isWp1) {
+          btn0.style.borderColor = '#0284c7';
+          btn0.style.background = '#e0f2fe';
+          btn0.style.color = '#0369a1';
+          btn1.style.borderColor = '#cbd5e1';
+          btn1.style.background = '#ffffff';
+          btn1.style.color = '#0f172a';
+        } else {
+          btn1.style.borderColor = '#0284c7';
+          btn1.style.background = '#e0f2fe';
+          btn1.style.color = '#0369a1';
+          btn0.style.borderColor = '#cbd5e1';
+          btn0.style.background = '#ffffff';
+          btn0.style.color = '#0f172a';
+        }
+      }
+    }
+
+    function switchWallpaper(index) {
+      if (typeof index === 'number' && WALLPAPERS[index]) {
+        window.currentWallpaperUrl = WALLPAPERS[index];
+      } else {
+        const nextIdx = (window.currentWallpaperUrl === WALLPAPERS[0]) ? 1 : 0;
+        window.currentWallpaperUrl = WALLPAPERS[nextIdx];
+      }
+      document.documentElement.style.setProperty('--wallpaper-url', "url('" + window.currentWallpaperUrl + "')");
+      document.body.style.backgroundImage = "url('" + window.currentWallpaperUrl + "')";
+      const layer = document.querySelector('.bg-wallpaper-layer');
+      if (layer) layer.style.backgroundImage = "url('" + window.currentWallpaperUrl + "')";
+      updateWallpaperUI();
+      if (typeof showToast === 'function') {
+        const name = window.currentWallpaperUrl.includes('145952531') ? '二次元主视觉' : '经典蔚蓝原画';
+        showToast('已切换至壁纸：' + name);
+      }
+    }
+
+    // 初始化一次壁纸 UI 高亮
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', updateWallpaperUI);
+    } else {
+      updateWallpaperUI();
+    }
+
+</script>
 </body>
 </html>
