@@ -76,6 +76,15 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # 释放托管 runner 的预装大件：build_dir 与缓存回填都在根分区，
+          # 历史失败是连 runner 自己的 _diag 日志都写不下（No space left on device），
+          # 属于构建中段爆盘而非编译错误。这里先腾出 ~25GB 再动手。
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/node \
+                      /opt/hostedtoolcache/go /usr/local/share/boost \
+                      /usr/local/.ghcup /opt/az /opt/microsoft /usr/share/swift \
+                      2>/dev/null || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
           sudo -E apt -yqq purge firefox
           # 移除 GitHub runners 预置的 google-chrome apt 源：其镜像偶发哈希不一致
           # （File has unexpected size / Mirror sync in progress?），会导致 `apt update`
@@ -95,6 +104,8 @@ jobs:
           sudo mkdir -p /mnt/build_wrt
           sudo chown $USER:$USER /mnt/build_wrt
           sudo ln -s /mnt/build_wrt $GITHUB_WORKSPACE/wrt
+          # 磁盘基线留痕：后续若再出现 No space left，可直接对照这一步的余量
+          df -h / /mnt 2>/dev/null || df -h /
 
       - name: Initialization Values
         run: |
