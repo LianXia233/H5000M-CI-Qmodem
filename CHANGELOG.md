@@ -1,5 +1,34 @@
 # 更新日志
 
+## [2026-11-04] 修复 runner 根分区耗尽（X86-qmodem-next 构建中段失败）
+
+### 背景
+
+2026-11-04 的 `OWRT-ALL` 运行里 `X86-qmodem-next` 失败，注解是：
+
+```
+System.IO.IOException: No space left on device :
+'/home/runner/actions-runner/cached/2.338.2/_diag/Worker_20261104-005940-utc.log'
+```
+
+这不是编译错误，而是构建进行到 49 分钟时把**根分区**写满了——连 runner 自己的
+诊断日志都落不了盘，job 直接被判失败。`/mnt/build_wrt` 只解决了「构建目录放哪」，
+并没有解决「根分区还剩多少」：托管 runner 预装的 .NET、Android SDK、GH CLI 缓存、
+CodeQL、Boost、Swift、Az、HostedToolCache 等合计占十几 GB，X86 全量编译（工具链 +
+内核 + Rust 插件 + qmodem 依赖）再叠上缓存回填，很容易顶到上限。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`（所有机型共用的编译核心，`WRT-BUILD` /
+  `OWRT-ALL` / `MTK-AUTO` 都经它执行）：
+  - `Initialization Environment` 开头新增磁盘释放：删除 `dotnet`、`android`、
+    `ghc`、`CodeQL`、`hostedtoolcache`（node/go）、`boost`、`ghcup`、`az`、
+    `microsoft`、`swift`，并 `docker image prune --all --force`，约腾出 25GB；
+  - 步骤末尾打印 `df -h / /mnt`，把可用空间写进日志，后续若再爆盘可直接对照；
+  - 保留 swap：X86 链接阶段吃内存，关 swap 反而更容易 OOM。
+
+未改编译参数、未动缓存键，构建产物与之前一致。
+
 ## [2026-10-31] 默认主题切换为 luci-theme-vantage（Aurora 保留为可选）
 
 ### 背景
