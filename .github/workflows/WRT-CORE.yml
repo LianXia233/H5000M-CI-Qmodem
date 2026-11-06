@@ -85,19 +85,37 @@ jobs:
                       /usr/local/.ghcup /opt/az /opt/microsoft /usr/share/swift \
                       2>/dev/null || true
           sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo -E apt -yqq purge firefox
+          # 托管 runner 的出口网络偶发抖动：2026-11-06 的故障里 apt 单包 47.5 kB
+          # 用了 46 s，661 MB 依赖下载停在 Get:9 之后长时间无进展，job 最终被判
+          # "lost communication"（连日志都没能上传）。给 apt 传输加硬超时与重试，
+          # 卡住时最多约一分钟就以非零退出，失败点留在日志里，而不是拖成失联。
+          sudo tee /etc/apt/apt.conf.d/99-ci-transfer-guard >/dev/null <<'EOF'
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          Acquire::Retries "3";
+          Acquire::http::Pipeline-Depth "0";
+          EOF
+          timeout 300 sudo -E apt -yqq purge firefox
           # 移除 GitHub runners 预置的 google-chrome apt 源：其镜像偶发哈希不一致
           # （File has unexpected size / Mirror sync in progress?），会导致 `apt update`
           # 返回非零并中断整个初始化步骤（Process completed with exit code 100）。
           sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
           # 即使个别非必需源临时不可用也不中断初始化（重试一次）
-          sudo -E apt -yqq update || sudo -E apt -yqq update
+          timeout 300 sudo -E apt -yqq update || timeout 300 sudo -E apt -yqq update
           # 不做 full-upgrade / autoremove：托管 runner 每次全量升级要数分钟，
           # 对 OpenWrt 编译没有收益，属于纯耗时项
           sudo -E apt -yqq autoclean
           sudo -E apt -yqq clean
-          sudo -E apt -yqq install dos2unix libfuse-dev ccache
-          sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+          timeout 420 sudo -E apt -yqq install dos2unix libfuse-dev ccache
+          # 先落盘再执行：curl 卡住时 `<(...)` 会给 bash 喂空脚本，步骤反而"成功"，
+          # 延迟到后续步骤才炸；落盘后能立刻校验内容并对下载本身设超时。
+          timeout 90 curl -fsSL --retry 3 --max-time 60 \
+            -o /tmp/init_build_environment.sh \
+            https://build-scripts.immortalwrt.org/init_build_environment.sh
+          wc -c /tmp/init_build_environment.sh
+          # 上游脚本要下 661 MB 依赖包，正常 3~5 分钟；20 分钟上限足够，
+          # 一旦网络卡死就带非零码退出（历史最长把 job 挂到 3.5 小时）。
+          sudo timeout -k 30 1200 bash /tmp/init_build_environment.sh
           sudo -E systemctl daemon-reload
           sudo -E timedatectl set-timezone "Asia/Shanghai"
 

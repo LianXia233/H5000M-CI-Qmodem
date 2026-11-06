@@ -1,5 +1,60 @@
 # 更新日志
 
+## [2026-11-06] 修复初始化阶段被 apt 下载卡死（runner 失联型失败）
+
+### 背景
+
+2026-11-06 的两次自动运行全部失败：`MTK-AUTO`（run `42142974224`，6 个 job）与
+`OWRT-ALL`（run `42142974216`，2 个 job）。8 个 job 的失败注解都是同一句：
+
+```
+The hosted runner lost communication with the server. Anything in your workflow
+that terminates the runner process, starves it for CPU/Memory, or blocks its
+network access can cause this error.
+```
+
+且全部停在 `Initialization Environment`（第 3 个步骤），后续步骤仍是 `pending`；
+job 从 01:18 UTC 起跑了 1 小时 14 分到 3 小时 30 分不等才被判失败。这些 job 的日志
+端点返回 `BlobNotFound`——runner 失联时日志没能上传，所以"失联"本身不是脚本报错。
+
+复现与定位：11:17 UTC 重跑 `H5000M-qmodem-next` 一个 job，同样卡在初始化
+（正常只需 4~5 分钟，卡了 20 分钟以上）。取消该 job 后日志可以取到，停在 apt 下载：
+
+```
+2026-11-06T11:29:34Z 0 upgraded, 303 newly installed, 0 to remove and 0 not upgraded.
+2026-11-06T11:29:34Z Need to get 661 MB of archives.
+2026-11-06T11:29:37Z Get:2 ... fonts-droid-fallback all 1:6.0.1r16-1.1build1 [1805 kB]
+2026-11-06T11:30:23Z Get:3 ... irqbalance amd64 1.9.3-2ubuntu5 [47.5 kB]
+2026-11-06T11:31:15Z Get:5 ... libfile-next-perl all 1.18-1 [17.2 kB]
+2026-11-06T11:31:21Z Get:9 ... openjdk-21-jre-headless amd64 [46.5 MB]
+（11:31:21 之后到 11:38:30 取消，7 分钟无任何进展）
+```
+
+47.5 kB 的单包用了 46 秒、17.2 kB 用了 51 秒，是 runner 出口网络严重降速的典型表现。
+同一时刻在 `northcentralus` 地域跑一条只做初始化、带超时的诊断任务，同样的
+661 MB 依赖在约 2 分钟内下完、整条初始化 5 分钟结束——说明仓库脚本与上游 feed 都正常，
+问题在个别 runner（本次卡死那台在 `westus2`）的网络链路上。同一夜 `OpenWRT-CI`、
+`OpenWRT-CI-H5000M` 两个仓库也是同样症状，三者共用同一个上游初始化脚本。
+
+### 变更
+
+`.github/workflows/WRT-CORE.yml` 的 `Initialization Environment`：
+
+- 新增 `/etc/apt/apt.conf.d/99-ci-transfer-guard`：`Acquire::http::Timeout` /
+  `Acquire::https::Timeout` 20 秒、`Acquire::Retries` 3 次、关闭 HTTP 流水线；
+  下载卡住时约一分钟内即非零退出，失败点留在日志里，而不是把 job 拖到平台判失联；
+- 仓库自身的 `apt purge / update / install` 全部加 `timeout`（300/300/420 秒）；
+- 上游 `init_build_environment.sh` 改为先 `curl --max-time 60 --retry 3` 落盘、
+  `wc -c` 校验，再以 `timeout -k 30 1200` 限时执行（原写法 `bash <(curl ...)`
+  在网络卡住时会给 bash 喂空脚本，步骤反而"成功"，问题推迟到后面才炸）。
+
+只加超时与重试，未删除任何步骤、未放宽任何校验、未改编译参数与缓存键。
+
+### 验证
+
+- 诊断任务（`diag/init-hang` 分支）在同一套命令下 5 分钟内跑完，退出码全为 0；
+- PR 分支上用 `WRT-BUILD` 手动触发一次完整构建（见 PR 描述）。
+
 ## [2026-11-04] 修复 runner 根分区耗尽（X86-qmodem-next 构建中段失败）
 
 ### 背景
