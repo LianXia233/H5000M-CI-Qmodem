@@ -1,5 +1,54 @@
 # 更新日志
 
+## [2026-11-06] 镜像按真实批量吞吐择优，初始化改为可续传重试
+
+### 背景
+
+上一笔 `fix(ci): 给初始化阶段的 apt 下载加超时与重试`（PR #26，`f19885b`）合入后，
+当天 12:26 UTC 的 `OWRT-ALL`（run 127）仍然失败：`X86-qmodem-next` 停在
+`Initialization Environment`，`Process completed with exit code 124` —— 传输超时与
+重试都到位了，但下载本身根本不可能在预算内完成。
+
+同一时段的兄弟仓库日志给出了原因：`azure.archive.ubuntu.com` 按 runner 随机命中吞吐
+退化，实测约 50 kB/s（`texlive-binaries` 8.5 MB 走掉 3 分钟），而同一批 job 里
+`deb.nodesource.com` 的 39.5 MB 一秒下完，另有若干 job 全程正常 —— 不是全网抖动，
+加超时只会把「慢」变成「失败」，不会变快。
+
+更要紧的是**测速方法本身是错的**。兄弟仓库 run 124 打印过同规格小文件（1.76 MB 的
+`Packages.gz`）的探测结果：
+
+```
+apt 镜像实测吞吐（字节/秒）：azure=45627172 archive=1045578
+```
+
+小文件测的是连接建立，不是持续吞吐：探测把已经退化的 azure 判成快 44 倍，几分钟后
+同一个镜像下 bulk `.deb` 只有 50 kB/s。用小文件判定不只是测不出退化，它会主动把
+慢镜像选进来。本仓库此前没有任何镜像选择逻辑，故直接按修正后的方法新增。
+
+### 变更
+
+- **新增 `Select Apt Mirror` 步骤**：用 `Range` 取 `universe/.../Packages.xz`
+  （15.0 MB，apt 自身要下载）的前 8 MB，在 azure 与 `archive.ubuntu.com` 之间实测
+  择优。50 kB/s 时 8 MB 需 160 秒，必然顶到 `--max-time`；azure 正常时 8 MB 不到 1 秒，
+  保持默认。代号取自 `/etc/os-release`，runner 换版后目标 404 会让两边都测到 0，
+  判定退回「保持默认」，属安全降级而非误切换。
+- **`99-ci-transfer-guard` 增加 `DPkg::Lock::Timeout "120"`**：锁竞争由 apt 自己等待，
+  不再立刻 exit 100。
+- **`init_build_environment.sh` 最多跑两次**：apt 已下载的 .deb 留在
+  `/var/cache/apt/archives`，第二次只补缺的部分，等于断点续传；单次仍是 20 分钟上限。
+  保持 `sudo` 在前、`timeout` 在后 —— 顺序写成 `timeout ... sudo apt` 时，超时只杀死
+  `sudo`，其拉起的 `apt` 会成孤儿继续持有 `/var/lib/dpkg/lock-frontend`，之后每次 apt
+  都卡在锁上（兄弟仓库当天就是这么空烧 30 分钟的）。失败时 `pgrep -a apt` 留下持锁者。
+
+未删步骤、未放宽校验、未改编译参数与缓存键。
+
+### 验证
+
+- 工作流 YAML 通过解析，全部 `run:` 块通过 `bash -n`。
+- 镜像判定逻辑用桩 `curl` 覆盖五个场景（azure 退化 / 两者都正常 / 两边都慢 /
+  azure 更快 / 探测失败返回 0），切换与保持默认的结论均符合预期。
+- 实际初始化耗时需在 fix 分支的 CI 上确认。
+
 ## [2026-11-06] 修复初始化阶段被 apt 下载卡死（runner 失联型失败）
 
 ### 背景
