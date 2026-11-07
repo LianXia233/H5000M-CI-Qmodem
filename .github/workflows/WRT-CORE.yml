@@ -430,6 +430,15 @@ jobs:
           # 若未来再次撞上上游"版本升级与补丁刷新未同 commit 落地"的竞态，
           # 参照 git 历史 6292c2d2 的做法临时替换，并同样注明移除条件。
 
+      - name: Import luci-app-online-upgrade (All Models)
+        # 全机型接入在线升级插件 v2（Rust 后端）。必须在 make defconfig 之前完成，
+        # 否则 Config/GENERAL.txt 里的 CONFIG_PACKAGE_luci-app-online-upgrade=y
+        # 找不到包而被 Kconfig 丢弃。脚本内部做结构断言与行尾归一化，失败即红。
+        run: |
+          cd ./wrt/package/
+
+          $GITHUB_WORKSPACE/Scripts/Packages-OnlineUpgrade.sh
+
       - name: Custom Packages
         run: |
           cd ./wrt/package/
@@ -574,6 +583,118 @@ jobs:
             sed -i '/^AIRPI_PREBUILT:=1$/d; /^AIRPI_PREBUILT_BIN:=/d' "$PKG_DIR/Makefile"
             rm -rf "$PREBUILT_DIR"
           fi
+
+      - name: Rust Cache (online-upgrade)
+        # 缓存 ~/.cargo（registry 元数据与 crate 包）与 cargo target 目录：
+        # 同一 commit 重复构建、以及不同机型的重复构建都只做增量编译。
+        # 不设 per-config key，让同一架构的多个机型共用一份缓存（target 下按
+        # target-triple 分目录，互不覆盖）；key 由 Cargo.lock 哈希决定，
+        # 依赖变动时自动失效重建，不会拿到过期产物。
+        if: env.WRT_TEST != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "wrt/package/luci-app-online-upgrade/rust -> .rust-build/online-upgrade/target"
+          shared-key: online-upgrade
+          cache-on-failure: "true"
+
+      - name: Precompile online-upgrade Rust Backend (Official Rust SDK)
+        # 用 Rust 官方 SDK（rustup stable + musl target）交叉编译，不使用 OpenWrt
+        # SDK 自带的 rust（那套要走 buildroot 的 rust/host，1.5~3 小时量级）。
+        # 交叉 C 编译器仍取 OpenWrt 工具链：ring 的 C/汇编部分与最终链接都由它完成，
+        # 产物是静态 musl ELF，与包 Makefile 期望的 ./root/usr/bin/online-upgrade 对齐。
+        # 与 OpenWrt SDK rust 的差异（README 已记录）：官方 SDK 的 rustc 版本更新，
+        # 但两者都产出 static-musl 二进制；本包 Cargo.toml 已固定
+        # opt-level=z / lto / codegen-units=1 / panic=abort / strip，运行时语义不变。
+        if: env.WRT_TEST != 'true'
+        run: |
+          cd ./wrt/
+
+          PKG_DIR="$(pwd)/package/luci-app-online-upgrade"
+          BIN_OUT="$PKG_DIR/root/usr/bin/online-upgrade"
+          CARGO_DIR="$PKG_DIR/rust"
+
+          [ -f "$CARGO_DIR/Cargo.toml" ] || {
+            echo "::error::未找到 $CARGO_DIR/Cargo.toml：插件包未就位（Import 步骤失败？）"
+            exit 1
+          }
+
+          # 目标架构取自 defconfig 后的 .config，与固件产物架构严格一致
+          ARCH_PKGS="$(sed -n 's/^CONFIG_TARGET_ARCH_PACKAGES="\(.*\)"$/\1/p' ./.config | head -n1)"
+          case "$ARCH_PKGS" in
+            aarch64*) ARCH=aarch64; TRIPLE=aarch64-unknown-linux-musl; CPU_ARGS="-C target-cpu=cortex-a53" ;;
+            x86_64*)  ARCH=x86_64;  TRIPLE=x86_64-unknown-linux-musl;  CPU_ARGS="" ;;
+            *) echo "::error::不支持的目标架构 '${ARCH_PKGS}'（仅 aarch64_cortex-a53 / x86_64）"; exit 1 ;;
+          esac
+          # mt7981（H5000M / AP3000M）为 Cortex-A53，显式指定；x86 不设 target-cpu，
+          # 保持基线指令集，避免在旧 CPU 上触发非法指令。
+
+          # 交叉 C 编译器：ring 需要；同时作为 cargo 的 linker
+          LINKER="$(find "$(pwd)/staging_dir" -type f -name "${ARCH}-openwrt-linux-musl-gcc" -perm -111 2>/dev/null | head -1)"
+          if [ -z "$LINKER" ]; then
+            echo "staging_dir 无 ${ARCH} musl 交叉 gcc，先构建工具链"
+            make toolchain/install -j"$(nproc)"
+            LINKER="$(find "$(pwd)/staging_dir" -type f -name "${ARCH}-openwrt-linux-musl-gcc" -perm -111 2>/dev/null | head -1)"
+          fi
+          [ -n "$LINKER" ] || { echo "::error::未找到 ${ARCH}-openwrt-linux-musl-gcc"; exit 1; }
+          LINKER="$(readlink -f "$LINKER")"
+          echo "交叉链接器：$LINKER"
+
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup target add "$TRIPLE" >/dev/null
+          rustc --version
+
+          # cc crate（ring 用）与 cargo 链接器命名规则不同，两套都要设
+          TRIPLE_U="$(printf '%s' "$TRIPLE" | tr '-' '_')"
+          TRIPLE_UC="$(printf '%s' "$TRIPLE" | tr '[:lower:]-' '[:upper:]_')"
+          TOOL_BIN="$(dirname "$LINKER")"
+          AR_BIN="$TOOL_BIN/${ARCH}-openwrt-linux-musl-ar"
+          [ -x "$AR_BIN" ] || AR_BIN="$TOOL_BIN/${ARCH}-openwrt-linux-musl-gcc-ar"
+          STRIP_BIN="$TOOL_BIN/${ARCH}-openwrt-linux-musl-strip"
+          [ -x "$STRIP_BIN" ] || STRIP_BIN="$(command -v strip)"
+          export "CC_${TRIPLE_U}=$LINKER"
+          export "AR_${TRIPLE_U}=$AR_BIN"
+          export "CARGO_TARGET_${TRIPLE_UC}_LINKER=$LINKER"
+          export CARGO_TARGET_DIR="$(pwd)/.rust-build/online-upgrade/target"
+          # shellcheck disable=SC2086
+          export RUSTFLAGS="$CPU_ARGS"
+
+          echo "开始编译（target=$TRIPLE，CPU_ARGS='${CPU_ARGS}'）"
+          START=$SECONDS
+          cargo build --locked --release --target "$TRIPLE" --manifest-path "$CARGO_DIR/Cargo.toml"
+          ELAPSED=$((SECONDS - START))
+          echo "cargo 编译耗时：${ELAPSED}s"
+
+          BIN="$CARGO_TARGET_DIR/$TRIPLE/release/online-upgrade"
+          [ -f "$BIN" ] || { echo "::error::cargo 未产出 $BIN"; exit 1; }
+
+          # 显式 strip（profile 里已有 strip=true，这里再幂等收尾并打印体积变化）
+          SIZE_BEFORE="$(stat -c %s "$BIN")"
+          "$STRIP_BIN" --strip-unneeded "$BIN" 2>/dev/null || true
+          SIZE_AFTER="$(stat -c %s "$BIN")"
+          echo "二进制体积：strip 前 ${SIZE_BEFORE} 字节 → strip 后 ${SIZE_AFTER} 字节"
+
+          # 落位与自检：架构不符或非静态链接会让设备上直接跑不起来，宁可在构建期红掉
+          mkdir -p "$(dirname "$BIN_OUT")"
+          install -m 0755 "$BIN" "$BIN_OUT"
+          file "$BIN_OUT"
+          file "$BIN_OUT" | grep -Eq "ELF 64-bit.*(ARM aarch64|x86-64).*statically linked" || {
+            echo "::error::$BIN_OUT 架构或链接方式不符（期望 ${ARCH} 静态 musl ELF）"
+            exit 1
+          }
+
+          {
+            echo "### online-upgrade Rust 后端（官方 SDK 交叉编译）"
+            echo ""
+            echo "- target: \`$TRIPLE\`"
+            echo "- 链接器: \`$LINKER\`"
+            echo "- 额外编译参数: \`${CPU_ARGS:-无}\`（profile 使用上游 opt-level=z / lto / codegen-units=1 / panic=abort）"
+            echo "- cargo 耗时: ${ELAPSED}s（是否命中缓存见上方 rust-cache 日志）"
+            echo "- 产物体积: ${SIZE_AFTER} 字节"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Host Rust Toolchain (Modem-Pro)
         # modem-pro 的 Rust 守护进程 modemd 由宿主 rustup 直编（MODEM_PRO_HOST_RUST=1）：

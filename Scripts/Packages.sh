@@ -306,9 +306,9 @@ FIX_H5000M_NETMODE_SRC() {
 }
 FIX_H5000M_NETMODE_SRC
 
-# 在线升级插件：从 GitHub Releases 按本机实际刷入的固件版本/类型自动匹配更新包
-# 具体脚本与默认值在 Scripts/online-upgrade/ 中按本仓库需求定制（构建时覆盖上游）
-UPDATE_PACKAGE "luci-app-online-upgrade" "gooyjq/luci-app-online-upgrade" "main"
+# 在线升级插件（luci-app-online-upgrade v2）不在这里接入：
+# 它由 Scripts/Packages-OnlineUpgrade.sh 在 WRT-CORE 的独立步骤里 clone 到
+# package/ 并做结构断言，Rust 后端在 defconfig 之后用官方 Rust SDK 预编译。
 
 #更新软件包版本
 UPDATE_VERSION() {

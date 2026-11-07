@@ -1,5 +1,83 @@
 # 更新日志
 
+## [2026-11-08] 全机型接入在线升级插件 v2，Rust 后端改用官方 SDK 编译
+
+### 背景
+
+仓库此前接入的是 `luci-app-online-upgrade` v1（`gooyjq/luci-app-online-upgrade`，
+shell/lua 实现），机型适配靠 `Scripts/Handles.sh` 往固件里烙 `/etc/online-upgrade-device`
+身份文件，再覆盖上游脚本与前端 JS。上游已升级为 v2（Rust 后端 + rpcd 接口，
+`LianXia233/luci-app-online-upgrade`），设备身份文件、`online-upgrade.sh`、
+`fix-frontend.py` 在新版本里都不再存在；同时 v2 的 `Build/Prepare`、`Build/Compile`
+为空，若走 buildroot 交叉编译会装出没有二进制的空壳。
+
+### 接入
+
+- 新增 `Scripts/Packages-OnlineUpgrade.sh`：clone 上游到 `package/luci-app-online-upgrade`，
+  清 `.git`/`.github`，文本文件转 LF 并按字节复核，断言 4 条结构前提
+  （引用 `feeds/luci/luci.mk`、从 `./root/usr/bin/online-upgrade` 取二进制、
+  `rust/Cargo.toml`、`root/etc/config/online-upgrade` 存在）；
+- 守卫路径按内容判定、幂等处理：`90-online-upgrade-auto` 的存在性守卫若仍判 v1 的
+  `/usr/bin/online-upgrade.sh`（v2 只装无后缀二进制），原样打包会让每次刷机首启
+  误判"插件丢失"并从外部仓库拉 `.apk` 覆盖自编二进制。上游已在 `98a966a`
+  （*fix: 修复 uci-defaults 存在性守卫对 v2 二进制路径判定错误并更新重装源仓库*）
+  自行改为 `[ -x /usr/bin/online-upgrade ]`，因此脚本只在**检出 v1 路径时**才改写，
+  上游已修复则跳过；随后双向断言（无 v1 残留、且存在针对真实二进制的 `-x`/`-f` 判定），
+  并核对 Makefile 安装项 / 守卫判定 / 预编译落点三处同为 `/usr/bin/online-upgrade`；
+- 包内唯一保留下来的 v1 引用是 `99-online-upgrade` 的 `rm -f /usr/bin/online-upgrade.sh`
+  （清理 v1 遗留），属有意保留；脚本会列出全部 v1 引用，只允许 `rm -f` 清理语句存在，
+  其余一律报错。注意不能对它做无差别改写 —— 那会变成删除 v2 的真实二进制；
+  另：`upgrade.rs` 用 `include_str!` 把该守卫脚本编进二进制（升级时重写设备上的
+  `/etc/uci-defaults/`），所以任何改写都必须在 `cargo build` 之前完成，WRT-CORE 中
+  「Import」步骤排在「Precompile」之前，顺序不可调换；
+- 新增 `Scripts/OnlineUpgradePreset.sh`，由 `Scripts/Settings.sh` 在 `make defconfig`
+  之前调用，生成 `./files/etc/config/online-upgrade`（覆盖包自带 conffile）；
+- `Scripts/Packages.sh` 移除 v1 的 `UPDATE_PACKAGE`，`Scripts/Handles.sh` 移除设备身份
+  烙入与脚本覆盖，删除 `Scripts/online-upgrade/`（`99-online-upgrade`、
+  `online-upgrade.sh`、`fix-frontend.py`）；
+- `WRT-CORE.yml` 新增「Import luci-app-online-upgrade (All Models)」步骤，
+  位于 `Update Feeds` 与 `Custom Packages` 之间，确保 defconfig 时包已就位。
+
+### 各机型预设
+
+配置键取自 Rust 源码（`uci.rs` 的 section `online-upgrade.settings`；
+`github.rs` 的 `repo`/`tag`/`proxy`/`firmware_pattern`/`min_size_mb`；
+`downloader.rs` 的 `dl_workers`/`dl_chunk_mb`/`dl_stall_sec`/`dl_retries`；
+`upgrade.rs` 的 `expected_sha256`）。上游默认配置里的 `enabled`、`keep_config`、
+`last_upgrade_version` 在 v2 代码中未被读取，预设不写入。
+
+| 机型配置 | `tag` | `firmware_pattern` |
+| :--- | :--- | :--- |
+| H5000M-qmodem / -qmodem-next / -modem-pro | `latest@^H5000M-…-<owner>-` | `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$` |
+| AP3000M-qmodem / -qmodem-next / -modem-pro | `latest@^AP3000M-…-<owner>-` | `^mediatek-filogic-airpi_ap3000m-squashfs-sysupgrade-.*\.bin$` |
+| X86-qmodem / -qmodem-next | `latest@^X86-…-<owner>-` | `^x86-64-generic-squashfs-combined-efi-.*\.img\.gz$` |
+
+`tag` 必须带 `<owner>-`：`H5000M-qmodem` 是 `H5000M-qmodem-next` 的字符串前缀，
+只写 `^H5000M-qmodem-` 会让前者命中后者的发布（已用真实 Release 标签验证）。
+
+### Rust 编译方式
+
+新增「Precompile online-upgrade Rust Backend (Official Rust SDK)」步骤（在
+`Setup Host Rust Toolchain` 之前）：
+
+- 用 rustup stable + `aarch64-unknown-linux-musl` / `x86_64-unknown-linux-musl`，
+  不用 OpenWrt SDK 自带 rust（那条路要先构建 buildroot 的 rust/host，小时级）；
+- 交叉 C 编译器取 OpenWrt 工具链（`<arch>-openwrt-linux-musl-gcc`），同时作为
+  `cc` crate（ring 用）与 cargo linker；缺失时先 `make toolchain/install`；
+- MTK 机型 `-C target-cpu=cortex-a53`（MT7981 为 A53），X86 不设 `target-cpu`；
+- 不覆盖包内 profile（上游已固定 `opt-level=z`/`lto`/`codegen-units=1`/`panic=abort`/`strip`），
+  strip 后再做一次幂等收尾并打印体积；
+- 产物落到 `package/luci-app-online-upgrade/root/usr/bin/online-upgrade`，
+  并用 `file` 断言为对应架构的静态 musl ELF，不符则构建失败（避免装出空壳/错架构）；
+- 新增 `Swatinem/rust-cache@v2`，缓存 `~/.cargo` 与 `wrt/.rust-build/online-upgrade/target`，
+  key 由 `Cargo.lock` 哈希决定，依赖未变时只做增量编译。
+
+### 文档
+
+`README.md` 重写「固件在线 OTA 升级」小节：各机型预设对照表、`tag` 前缀锚定的原因、
+X86 BIOS/Legacy 的改法，以及官方 SDK 与 OpenWrt SDK 的差异（同为静态 musl、
+panic=abort 一致，差异只在 rustc 版本与构建耗时）。
+
 ## [2026-11-06] 镜像按真实批量吞吐择优，初始化改为可续传重试
 
 ### 背景

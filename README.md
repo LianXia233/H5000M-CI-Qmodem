@@ -97,10 +97,59 @@
 ## 🛠️ 三、 核心专属套件详解
 
 ### 1. 固件在线 OTA 升级 (`luci-app-online-upgrade`)
-进入 LuCI 菜单：**系统 → 在线升级**：
-- **设备指纹精准防呆**：构建期在固件烙印 `{机型}-{前端方案}` 唯一特征（`/etc/online-upgrade-device`），精准定位对应 Release，杜绝错刷；
-- **配置无损还原**：默认开启 `keep_config`，刷写前自动备份系统关键配置并在重启后全量恢复；
-- **极速下载通道**：内置反向代理下载加速镜像，解决国内 GitHub 下载缓慢问题。
+
+全机型（H5000M / AP3000M / X86 共 8 个配置）默认内置 v2 版本（Rust 后端 + rpcd 接口），
+源码取自 [LianXia233/luci-app-online-upgrade](https://github.com/LianXia233/luci-app-online-upgrade)：
+
+- **按机型锁定升级源**：构建期由 `Scripts/OnlineUpgradePreset.sh` 生成
+  `/etc/config/online-upgrade`，其中 `repo` / `tag` / `firmware_pattern` 与本次产物一一对应，
+  不会把 X86 的镜像刷进 MTK 机型；
+- **资产名精确匹配**：`firmware_pattern` 由 `.config` 的 `TARGET_DEVICE` 反推
+  （如 `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$`），
+  X86 固定取 UEFI 镜像 `^x86-64-generic-squashfs-combined-efi-.*\.img\.gz$`；
+- **国内下载加速**：预设 `proxy` 为 `https://gh.acg2.mom/`，配合 Rust 后端的
+  分块并发下载（`dl_workers` / `dl_chunk_mb` / `dl_stall_sec` / `dl_retries`）；
+- **自动重装守卫与安装路径一致**：`90-online-upgrade-auto` 用 `-x /usr/bin/online-upgrade`
+  判定插件是否存在（上游 `98a966a` 已修），避免刷机首启误判「插件丢失」而下载外部
+  `.apk` 覆盖自编二进制；导入脚本按内容幂等校验，并核对 Makefile 安装项、
+  守卫判定、预编译落点三处同为该路径。
+
+各机型预设对照（`tag` 中的 `<owner>` 为本次编译所用源码仓库 owner）：
+
+| 机型配置 | `tag` | `firmware_pattern` |
+| :--- | :--- | :--- |
+| `H5000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<机型>-<owner>-` | `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$` |
+| `AP3000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<机型>-<owner>-` | `^mediatek-filogic-airpi_ap3000m-squashfs-sysupgrade-.*\.bin$` |
+| `X86-qmodem` / `-qmodem-next` | `latest@^<机型>-<owner>-` | `^x86-64-generic-squashfs-combined-efi-.*\.img\.gz$` |
+
+说明：
+
+- `tag` 必须带 `<owner>-` 锚定：`H5000M-qmodem` 是 `H5000M-qmodem-next` 的字符串前缀，
+  只写 `^H5000M-qmodem-` 会让前者命中后者的发布；
+- X86 的 BIOS/Legacy 机器需把 `firmware_pattern` 改成
+  `^x86-64-generic-squashfs-combined-.*\.img\.gz$`（两种镜像分区表不同，不能混用）；
+- 上游默认配置里的 `enabled` / `keep_config` 在 v2 的 Rust 与 rpcd 代码中**未被读取**，
+  预设不写入这两个键，避免"配了却不起作用"；升级前的配置保留由插件自身逻辑决定。
+
+Rust 后端用**官方 Rust SDK**（rustup stable + `aarch64-unknown-linux-musl` /
+`x86_64-unknown-linux-musl`）交叉编译，链接交给 OpenWrt 工具链的交叉 `gcc`，
+不经过 OpenWrt SDK 自带的 rust 构建链。MTK 机型显式使用 `-C target-cpu=cortex-a53`
+（MT7981 为 Cortex-A53），X86 保持基线指令集；产物为静态 musl ELF，
+安装路径与包 Makefile 期望的 `/usr/bin/online-upgrade` 一致。
+
+两种编译方式的差异（取舍已固定，不做隐式变更）：
+
+| 维度 | 官方 Rust SDK（当前） | OpenWrt SDK 自带 rust |
+| :--- | :--- | :--- |
+| C 运行库 | `*-unknown-linux-musl` + OpenWrt musl sysroot，静态链接 | 同为 musl 静态链接 |
+| rustc 版本 | rustup stable（随官方发布滚动） | 与 SDK 内 rust 版本绑定，通常落后 |
+| panic 策略 | 由包内 `Cargo.toml` 固定 `panic = "abort"`，两条路径一致 | 同上 |
+| 符号与体积 | profile 固定 `opt-level=z` / `lto` / `codegen-units=1` / `strip` | 同上 |
+| 构建耗时 | 约 2~6 分钟（含依赖编译），命中缓存后增量 | 需先构建 buildroot 的 rust/host，小时级 |
+
+因此运行时行为（ABI、静态链接、panic=abort）与原来一致，差异只在 rustc 版本
+与构建耗时；不引入 glibc 依赖，也不改变安装路径与文件名。
+
 
 ### 2. 硬件风扇温控与多网切换
 - **双温区联动风扇控制 (`luci-app-h5000m-fancontrol`)**：定时轮询 CPU 与模组硬件传感器，通过阶梯 PWM 曲线实现静音与强效散热平衡；
@@ -156,9 +205,10 @@ H5000M-CI-Qmodem/
 │   └── X86-*.txt               # X86 各方案目标配置
 ├── Scripts/                    # 流水线生命周期钩子脚本
 │   ├── Packages.sh             # 第三方 Feed 扩展源同步与锁定
+│   ├── Packages-OnlineUpgrade.sh  # 在线升级插件导入（结构断言 + 行尾归一化）
+│   ├── OnlineUpgradePreset.sh  # 按机型生成 /etc/config/online-upgrade
 │   ├── Handles.sh              # 补丁修补、静态资源预置与依赖注入
-│   ├── Settings.sh             # 出厂默认 IP、Wi-Fi 与参数配置
-│   └── online-upgrade/         # 在线升级专属支持脚本
+│   └── Settings.sh             # 出厂默认 IP、Wi-Fi 与参数配置
 ├── index.html                  # 现代化固件发布聚合展示落地页
 └── README.md                   # 固件说明文档
 ```
