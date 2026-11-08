@@ -137,6 +137,12 @@ Rust 后端用**官方 Rust SDK**（rustup stable + `aarch64-unknown-linux-musl`
 （MT7981 为 Cortex-A53），X86 保持基线指令集；产物为静态 musl ELF，
 安装路径与包 Makefile 期望的 `/usr/bin/online-upgrade` 一致。
 
+产物自检（`file`）在两种架构上的措辞不同：`x86_64-unknown-linux-musl` 默认产出
+**static-pie linked**（`ET_DYN`，启动时自重定位），`aarch64-unknown-linux-musl` 产出
+**statically linked**。两者均无 `PT_INTERP`、无任何 `DT_NEEDED`，同属完全静态，
+设备上不需要加载器或共享 libc 即可运行，因此断言同时接受这两种措辞，
+只拒绝动态链接、非 ELF64 与错架构产物。在设备上 `file` 看到 `static-pie` 属正常。
+
 两种编译方式的差异（取舍已固定，不做隐式变更）：
 
 | 维度 | 官方 Rust SDK（当前） | OpenWrt SDK 自带 rust |

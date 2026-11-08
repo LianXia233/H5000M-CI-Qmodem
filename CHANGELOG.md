@@ -1,5 +1,80 @@
 # 更新日志
 
+## [2026-11-08] 修复 X86 在线升级 Rust 产物自检误判 static-pie（编译成功却红掉）
+
+### 背景
+
+`OWRT-ALL` run [42428333664](https://github.com/LianXia233/H5000M-CI-Qmodem/actions/runs/42428333664)
+的 `X86-qmodem-next` 与 `X86-qmodem` 双双停在
+「Precompile online-upgrade Rust Backend (Official Rust SDK)」：
+
+```
+online-upgrade: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, stripped
+##[error]…/root/usr/bin/online-upgrade 架构或链接方式不符（期望 x86_64 静态 musl ELF）
+```
+
+`cargo build` 本身是成功的（41.46s，产物 3814440 字节），红的只是产物自检 ——
+断言把一份完全合格的静态二进制判成了不合格，后续 `Compile Firmware` / `Package
+Firmware` / `Release Firmware` 全部被跳过，X86 当天出不了固件。
+
+### 根因
+
+上一笔引入的断言只认 `statically linked` 一种措辞：
+
+```bash
+file "$BIN_OUT" | grep -Eq "ELF 64-bit.*(ARM aarch64|x86-64).*statically linked"
+```
+
+而 Rust 的 musl target 在两种架构上默认链接形态并不相同（本地 rustc 1.98.0 实测）：
+
+| target | `file` 措辞 | ELF 类型 |
+| :--- | :--- | :--- |
+| `x86_64-unknown-linux-musl` | `static-pie linked` | `ET_DYN`（pie executable） |
+| `aarch64-unknown-linux-musl` | `statically linked` | `ET_EXEC`（executable） |
+
+x86_64-musl 默认开启 static-PIE，`file` 因此打印 `static-pie linked`，正则失配。
+MTK（aarch64）走的正是 classic static 分支，所以这条断言从引入起就只在 X86 上炸，
+在 MTK 上永远不会暴露 —— 属架构相关的隐藏失配，不是网络或工具链抖动。
+
+`readelf` 复核确认 static-pie 产物**确实是完全静态**：`PT_INTERP` 段 0 个、
+`DT_NEEDED`/`RPATH`/`RUNPATH` 0 条。它虽有 DYNAMIC 段（static-PIE 靠其中的
+RELA/RELACOUNT 在启动时自重定位，并带 `FLAGS_1: NOW PIE`），但没有任何共享库依赖，
+设备上不需要加载器或共享 libc，可直接执行，
+原断言的保护意图（拒绝动态链接、拒绝错架构）不应把它排除在外。
+
+### 修复
+
+`.github/workflows/WRT-CORE.yml` 的断言同时接受两种静态措辞，其余保持不变：
+
+```bash
+file "$BIN_OUT" | grep -Eq "ELF 64-bit.*(ARM aarch64|x86-64).*(statically linked|static-pie linked)"
+```
+
+不改编译参数：不去强行 `-no-pie` / `relocation-model=static` 把 x86_64 掰回
+classic static。static-PIE 是 Rust musl target 的官方默认，与 `ring` 的汇编和
+OpenWrt 交叉 gcc 的默认 specs 配合已验证可用，逆着默认改只会引入新的链接变数。
+
+### 验证
+
+从修改后的 YAML 中解析出该步骤真实的断言语句（非手抄正则）后实测：
+
+- 正向：本地 `rustc --target x86_64-unknown-linux-musl` 与
+  `--target aarch64-unknown-linux-musl` 产出的真二进制，两者均 PASS
+  （x86_64 由修复前的 FAIL 转 PASS，aarch64 保持 PASS，MTK 无回归）；
+- 负向：动态链接 musl（带 `ld-musl-x86_64.so.1` 解释器）、动态链接 aarch64
+  （带 `ld-linux-aarch64.so.1`）、32 位 ARM 静态 ELF、Windows PE32+，四类全部仍被拒绝；
+- `yaml.safe_load` 解析通过，`.yml` 行尾仍为 LF（`.gitattributes` 约定）。
+
+### 文档
+
+`README.md` 在「固件在线 OTA 升级」的 Rust 编译说明后补充两种架构的 `file`
+措辞差异与 static-pie 的静态性依据，避免日后在设备上看到 `static-pie` 误判为装错产物。
+
+### 已知非致命项（本次未改）
+
+链接阶段有 `x86_64-openwrt-linux-musl-gcc: environment variable 'STAGING_DIR' not
+defined` 警告，仅为 OpenWrt 交叉 gcc 的提示，不影响产物正确性，与本次失败无关。
+
 ## [2026-11-08] 全机型接入在线升级插件 v2，Rust 后端改用官方 SDK 编译
 
 ### 背景

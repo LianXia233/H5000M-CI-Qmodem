@@ -678,10 +678,11 @@ jobs:
           echo "二进制体积：strip 前 ${SIZE_BEFORE} 字节 → strip 后 ${SIZE_AFTER} 字节"
 
           # 落位与自检：架构不符或非静态链接会让设备上直接跑不起来，宁可在构建期红掉
+          # x86_64-musl 默认 static-pie、aarch64-musl 为 statically linked，两者均无 INTERP/NEEDED，同属完全静态
           mkdir -p "$(dirname "$BIN_OUT")"
           install -m 0755 "$BIN" "$BIN_OUT"
           file "$BIN_OUT"
-          file "$BIN_OUT" | grep -Eq "ELF 64-bit.*(ARM aarch64|x86-64).*statically linked" || {
+          file "$BIN_OUT" | grep -Eq "ELF 64-bit.*(ARM aarch64|x86-64).*(statically linked|static-pie linked)" || {
             echo "::error::$BIN_OUT 架构或链接方式不符（期望 ${ARCH} 静态 musl ELF）"
             exit 1
           }
