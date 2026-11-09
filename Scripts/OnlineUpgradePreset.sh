@@ -3,11 +3,10 @@
 # 按机型生成 luci-app-online-upgrade 的出厂预设（/etc/config/online-upgrade）
 #
 # 为什么在构建期生成而不是每机型提交一份静态文件：
-#   升级源里「哪个 Release / 哪个资产」取决于运行期变量 —— WRT_CONFIG 决定
-#   Release 归组（H5000M-qmodem / H5000M-qmodem-next / X86-qmodem-next ...），
-#   .config 里的 TARGET_DEVICE 决定资产名前缀（hiveton_h5000m / airpi_ap3000m /
-#   x86-64-generic）。静态文件无法覆盖「同一份配置换源码分支编译」的组合，
-#   构建期生成则与本次产物一一对应。
+#   升级源里「哪个 Release / 哪个资产」取决于运行期变量 —— WRT_CONFIG 同时
+#   决定 Release 归组（H5000M-qmodem / H5000M-qmodem-next / X86-qmodem-next ...）
+#   与产物文件名前缀（<WRT_CONFIG>-<YYYYMMDD>-...）。静态文件无法覆盖
+#   「同一份配置换源码分支编译」的组合，构建期生成则与本次产物一一对应。
 #
 # 落点遵循仓库既有 overlay 约定：$(TOPDIR)/files 会被原样并入 rootfs，
 # Scripts/Settings.sh 也已用 ./files/etc/uci-defaults 生成无线种子。
@@ -45,36 +44,22 @@ if [ -z "$WRT_CONFIG" ] || [ -z "$WRT_INFO" ]; then
 fi
 
 # ===== 资产名规则 =====
-# 取自 WRT-CORE「Package Firmware」：资产名为
-#   <TARGET_DIR>-<SUBTARGET>-<DEVICE>-squashfs-sysupgrade-<INFO>-<BRANCH>-<WIFI>-<DATE>.bin
-# （x86 为 <TARGET>-<SUBTARGET>-generic-squashfs-combined-efi-…img.gz）。
-# 因此从 .config 的 TARGET_DEVICE 反推前缀，与真实产物保持一致。
-PATTERN=""
-
-if grep -q '^CONFIG_TARGET_x86=y' ./.config 2>/dev/null; then
-	# x86/64 用 ALL_PROFILES，.config 里没有 TARGET_DEVICE 行。
-	# 默认取 UEFI 镜像：现代小主机/软路由主流引导方式；BIOS/Legacy 机器需把
-	# firmware_pattern 改成 ^x86-64-generic-squashfs-combined-.*\.img\.gz$ ——
-	# 两种镜像的分区表不同，不能混用。
-	PATTERN='^x86-64-generic-squashfs-combined-efi-.*\.img\.gz$'
-else
-	DEVICE_LINE="$(grep -m1 -oE '^CONFIG_TARGET_DEVICE_[A-Za-z0-9_]+=y' ./.config || true)"
-	if [ -n "$DEVICE_LINE" ]; then
-		KEY="${DEVICE_LINE#CONFIG_TARGET_DEVICE_}"
-		KEY="${KEY%=y}"
-		# KEY 形如 <target>_<subtarget>_DEVICE_<device>，设备名本身可能含下划线
-		TARGET_PREFIX="${KEY%%_DEVICE_*}"
-		DEVICE_NAME="${KEY#*_DEVICE_}"
-		TARGET_PREFIX="$(printf '%s' "$TARGET_PREFIX" | tr '_' '-')"
-		PATTERN="^${TARGET_PREFIX}-${DEVICE_NAME}-squashfs-sysupgrade-.*\\.bin\$"
-	fi
-fi
-
-if [ -z "$PATTERN" ]; then
-	# 兜底：未知平台只按 sysupgrade.bin 结尾匹配，并明确告警要求人工核对。
-	echo "::warning::无法从 .config 推导机型资产前缀（WRT_CONFIG=${WRT_CONFIG}），使用通用 sysupgrade 正则"
-	PATTERN='-squashfs-sysupgrade-.*\.bin$'
-fi
+# 与 WRT-CORE「Package Firmware」保持一致：资产名统一为
+#   <WRT_CONFIG>-<YYYYMMDD>[-<镜像类型>].<扩展名>
+# WRT_CONFIG 即 "<机型>-<模组插件>"（如 H5000M-qmodem-next），正则直接锚定
+# 配置名即可天然隔离同机型三套变体，不再需要从 .config 的 TARGET_DEVICE
+# 反推平台前缀（旧规则无法区分变体，且换源码分支就要跟着改）。
+# 日期用 [0-9]+ 而非写死 8 位，便于兼容过渡期混合命名的 Release。
+case "$WRT_CONFIG" in
+	X86-*)
+		# 默认取 UEFI 镜像：现代小主机/软路由主流引导方式；BIOS/Legacy 机器
+		# 需把 combined-efi 改成 combined —— 两种镜像分区表不同，不能混用。
+		PATTERN="^${WRT_CONFIG}-[0-9]+-combined-efi\\.img\\.gz\$"
+		;;
+	*)
+		PATTERN="^${WRT_CONFIG}-[0-9]+-sysupgrade\\.bin\$"
+		;;
+esac
 
 # tag 语义来自 rust/src/github.rs：latest 取最新 Release，
 # latest@<正则> 只在该正则匹配的 Tag 里找最新。

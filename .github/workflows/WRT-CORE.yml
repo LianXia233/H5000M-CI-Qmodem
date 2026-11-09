@@ -212,7 +212,11 @@ jobs:
             exit 1
           fi
 
-          echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          # 一次 date 同时取出「标签时间戳」与「8 位编译日期」，避免两次调用
+          # 恰好跨过零点，导致 Release 标签与产物文件名里的日期对不上。
+          WRT_NOW="$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S:%Y%m%d")"
+          echo "WRT_DATE=${WRT_NOW%%:*}" >> $GITHUB_ENV
+          echo "WRT_DATE_SHORT=${WRT_NOW##*:}" >> $GITHUB_ENV
           echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
           echo "WRT_INFO=${WRT_SOURCE%%/*}" >> $GITHUB_ENV
           echo "WRT_CONFIG_FILE=$CONFIG_FILE" >> $GITHUB_ENV
@@ -778,7 +782,14 @@ jobs:
         run: |
           cd ./wrt/ && mkdir ./upload/
 
-          cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
+          # 产物统一命名：<机型>-<模组插件>-<编译日期>[-<镜像类型>].<扩展名>
+          # WRT_CONFIG 本身即 "<机型>-<模组插件>"（如 H5000M-qmodem-next）。
+          # 旧命名只带平台 / 源码 owner / 分支 / wifi / 时间戳，同机型三套变体
+          # 下载后完全分不清；现在只靠文件名即可区分 qmodem-next / qmodem /
+          # modem-pro。镜像类型后缀必须保留：X86 单次构建产出 12 个不同格式的
+          # 镜像，去掉后会互相覆盖。源码与时间戳等冗余信息仍完整保留在 Release
+          # 标签与描述里，不再塞进文件名。
+          cp -f ./.config ./upload/"$WRT_CONFIG"-"$WRT_DATE_SHORT".config.txt
 
           if [[ $WRT_TEST != 'true' ]]; then
             echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> $GITHUB_ENV
@@ -787,10 +798,29 @@ jobs:
             find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
-              EXT=$(basename $FILE | cut -d '.' -f 2-)
-              NAME=$(basename $FILE | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
-              NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
-              mv -f $FILE ./upload/$NEW_FILE
+              EXT=$(basename "$FILE" | cut -d '.' -f 2-)
+              NAME=$(basename "$FILE" | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
+
+              # 剥掉平台 / 设备 / squashfs 前缀，只留能区分镜像格式的短标识：
+              #   mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade -> sysupgrade
+              #   x86-64-generic-squashfs-combined-efi               -> combined-efi
+              #   mediatek-filogic / x86-64（manifest）                -> 空
+              IMG_SLUG="$(printf '%s' "$NAME" | sed -E \
+                -e 's/^mediatek-filogic-(hiveton_h5000m|airpi_ap3000m)-//' \
+                -e 's/^x86-64-generic-//' \
+                -e 's/^mediatek-filogic-//' \
+                -e 's/^x86-64-//' \
+                -e 's/^squashfs-//')"
+              case "$IMG_SLUG" in
+                ''|mediatek-filogic|x86-64|x86-64-generic) IMG_SLUG="" ;;
+              esac
+
+              if [ -n "$IMG_SLUG" ]; then
+                NEW_FILE="$WRT_CONFIG-$WRT_DATE_SHORT-$IMG_SLUG.$EXT"
+              else
+                NEW_FILE="$WRT_CONFIG-$WRT_DATE_SHORT.$EXT"
+              fi
+              mv -f "$FILE" ./upload/"$NEW_FILE"
             done
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;

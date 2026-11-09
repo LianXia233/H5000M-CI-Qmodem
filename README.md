@@ -41,6 +41,30 @@
 | **`AP3000M`** | MediaTek Filogic (MT7981B + MT7976C) | AirPi AP3000M Wi-Fi 6 路由器 | ✅ Wi-Fi 6 (AX · mt76) | QModem: `immortalwrt` (`master`)<br>Modem Pro: `VIKINGYFY` (`owrt`) |
 | **`X86`** | x86_64 通用架构 | 工控机 / 软路由 / 物理 PC / 虚拟机 | — | `immortalwrt/immortalwrt` (`master`) |
 
+### 固件产物命名规则
+
+Release 产物统一按 `机型-模组插件-编译日期[-镜像类型].扩展名` 命名：
+`机型-模组插件` 即编译配置名 `WRT_CONFIG`（如 `H5000M-qmodem-next`），
+编译日期取构建当天 `YYYYMMDD`（`Asia/Shanghai`）。仅凭文件名即可分辨同机型的
+QModem Next / QModem / Modem Pro 三套变体，无需再对照 Release 标签。
+
+| 产物 | 文件名示例 |
+| :--- | :--- |
+| MTK sysupgrade 固件（Next） | `H5000M-qmodem-next-20261109-sysupgrade.bin` |
+| MTK sysupgrade 固件（传统版） | `H5000M-qmodem-20261109-sysupgrade.bin` |
+| MTK sysupgrade 固件（Modem Pro） | `H5000M-modem-pro-20261109-sysupgrade.bin` |
+| 软件包清单 | `H5000M-qmodem-next-20261109.manifest` |
+| 编译配置存档 | `H5000M-qmodem-next-20261109.config.txt` |
+| X86 UEFI 镜像 | `X86-qmodem-next-20261109-combined-efi.img.gz` |
+| X86 Legacy BIOS 镜像 | `X86-qmodem-next-20261109-combined.img.gz` |
+| X86 VMware 虚拟磁盘 | `X86-qmodem-next-20261109-combined-efi.vmdk` |
+
+- **镜像类型后缀不可省**：X86 单次构建产出 12 个不同格式的镜像（EFI / BIOS、
+  `img.gz` / `vmdk` / `iso`、`rootfs`、`kernel` 等），去掉后会互相覆盖；
+- 源码仓库、分支、`wifi-yes` 与精确到秒的时间戳不再塞进文件名，仍完整保留在
+  Release 标签与描述中；
+- Release 标签格式不变：`<配置名>-<源码owner>-<分支>-<YY.MM.DD-HH.MM.SS>`。
+
 ---
 
 ## ⚙️ 默认出厂网络配置
@@ -104,9 +128,10 @@
 - **按机型锁定升级源**：构建期由 `Scripts/OnlineUpgradePreset.sh` 生成
   `/etc/config/online-upgrade`，其中 `repo` / `tag` / `firmware_pattern` 与本次产物一一对应，
   不会把 X86 的镜像刷进 MTK 机型；
-- **资产名精确匹配**：`firmware_pattern` 由 `.config` 的 `TARGET_DEVICE` 反推
-  （如 `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$`），
-  X86 固定取 UEFI 镜像 `^x86-64-generic-squashfs-combined-efi-.*\.img\.gz$`；
+- **资产名精确匹配**：`firmware_pattern` 直接锚定编译配置名
+  （如 `^H5000M-qmodem-next-[0-9]+-sysupgrade\.bin$`），X86 固定取 UEFI 镜像
+  `^X86-qmodem-next-[0-9]+-combined-efi\.img\.gz$`；配置名含机型与模组插件，
+  因此同机型三套变体之间不会互相误匹配；
 - **国内下载加速**：预设 `proxy` 为 `https://gh.acg2.mom/`，配合 Rust 后端的
   分块并发下载（`dl_workers` / `dl_chunk_mb` / `dl_stall_sec` / `dl_retries`）；
 - **自动重装守卫与安装路径一致**：`90-online-upgrade-auto` 用 `-x /usr/bin/online-upgrade`
@@ -114,22 +139,30 @@
   `.apk` 覆盖自编二进制；导入脚本按内容幂等校验，并核对 Makefile 安装项、
   守卫判定、预编译落点三处同为该路径。
 
-各机型预设对照（`tag` 中的 `<owner>` 为本次编译所用源码仓库 owner）：
+各机型预设对照（`<配置名>` 即 `WRT_CONFIG`，形如 `机型-模组插件`；`<owner>` 为本次编译所用源码仓库 owner）：
 
 | 机型配置 | `tag` | `firmware_pattern` |
 | :--- | :--- | :--- |
-| `H5000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<机型>-<owner>-` | `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$` |
-| `AP3000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<机型>-<owner>-` | `^mediatek-filogic-airpi_ap3000m-squashfs-sysupgrade-.*\.bin$` |
-| `X86-qmodem` / `-qmodem-next` | `latest@^<机型>-<owner>-` | `^x86-64-generic-squashfs-combined-efi-.*\.img\.gz$` |
+| `H5000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<配置名>-<owner>-` | `^<配置名>-[0-9]+-sysupgrade\.bin$` |
+| `AP3000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<配置名>-<owner>-` | `^<配置名>-[0-9]+-sysupgrade\.bin$` |
+| `X86-qmodem` / `-qmodem-next` | `latest@^<配置名>-<owner>-` | `^<配置名>-[0-9]+-combined-efi\.img\.gz$` |
 
 说明：
 
 - `tag` 必须带 `<owner>-` 锚定：`H5000M-qmodem` 是 `H5000M-qmodem-next` 的字符串前缀，
   只写 `^H5000M-qmodem-` 会让前者命中后者的发布；
 - X86 的 BIOS/Legacy 机器需把 `firmware_pattern` 改成
-  `^x86-64-generic-squashfs-combined-.*\.img\.gz$`（两种镜像分区表不同，不能混用）；
+  `^<配置名>-[0-9]+-combined\.img\.gz$`（两种镜像分区表不同，不能混用）；
 - 上游默认配置里的 `enabled` / `keep_config` 在 v2 的 Rust 与 rpcd 代码中**未被读取**，
   预设不写入这两个键，避免"配了却不起作用"；升级前的配置保留由插件自身逻辑决定。
+
+> [!WARNING]
+> **旧固件 OTA 过渡**：产物改用 `机型-模组插件-编译日期` 命名后，旧固件里固化的
+> `firmware_pattern` 仍是平台前缀式正则（如
+> `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$`），无法匹配新命名的资产。
+> 已刷入旧固件的设备需**手动下载对应 `*-sysupgrade.bin` 刷一次**（X86 用
+> `*-combined-efi.img.gz`），或先在 LuCI 里把 `firmware_pattern` 改成上表的新正则，
+> 之后即可恢复一键 OTA；新固件出厂预设已是新正则，不受影响。
 
 Rust 后端用**官方 Rust SDK**（rustup stable + `aarch64-unknown-linux-musl` /
 `x86_64-unknown-linux-musl`）交叉编译，链接交给 OpenWrt 工具链的交叉 `gcc`，

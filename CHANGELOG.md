@@ -1,5 +1,67 @@
 # 更新日志
 
+## [2026-11-10] 统一 Release 产物命名：机型-模组插件-编译日期
+
+### 背景
+
+`WRT-CORE.yml` 的 `Package Firmware` 此前按
+
+```bash
+NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
+```
+
+拼接文件名，`$NAME` 是 OpenWrt 构建原始产物名（平台 / 子目标 / 设备 / 镜像类型），
+**完全不含 `WRT_CONFIG`**。于是同机型三套变体的固件名只差末尾时间戳与源码 owner：
+
+| 变体 | 旧产物名（节选） |
+| :--- | :--- |
+| `H5000M-qmodem-next` | `mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.11.09-08.31.52.bin` |
+| `H5000M-qmodem` | `mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.11.09-08.30.22.bin` |
+| `H5000M-modem-pro` | `mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-VIKINGYFY-owrt-wifi-yes-26.11.09-08.30.06.bin` |
+
+Release 标签虽已区分变体，但下载到本地后三个 `.bin` 无法分辨，只能靠时间戳猜，
+存在刷错前端（Next / 传统 LuCI / Modem Pro）的风险。
+
+### 改动
+
+产物统一为 `<WRT_CONFIG>-<YYYYMMDD>[-<镜像类型>].<扩展名>`：`WRT_CONFIG` 本身即
+`机型-模组插件`，日期取构建当天 8 位 `YYYYMMDD`（`Asia/Shanghai`）。
+
+| 产物 | 新文件名 |
+| :--- | :--- |
+| MTK sysupgrade | `H5000M-qmodem-next-20261109-sysupgrade.bin` |
+| MTK 传统版 | `H5000M-qmodem-20261109-sysupgrade.bin` |
+| MTK Modem Pro | `H5000M-modem-pro-20261109-sysupgrade.bin` |
+| 软件包清单 | `H5000M-qmodem-next-20261109.manifest` |
+| 编译配置存档 | `H5000M-qmodem-next-20261109.config.txt` |
+| X86 UEFI 镜像 | `X86-qmodem-next-20261109-combined-efi.img.gz` |
+| X86 BIOS 镜像 | `X86-qmodem-next-20261109-combined.img.gz` |
+| X86 虚拟磁盘 | `X86-qmodem-next-20261109-combined-efi.vmdk` |
+
+- **镜像类型后缀必须保留**：X86 单次构建产出 12 个不同格式（EFI / BIOS、
+  `img.gz` / `vmdk` / `iso`、`rootfs`、`kernel`），去掉后会互相覆盖；
+- 源码 owner、分支、`wifi-yes` 与精确到秒的时间戳不再进文件名，仍完整保留在
+  Release 标签与描述里；标签格式不变，`Auto-Clean.yml` 按标签分组不受影响；
+- `index.html` 靠 `combined-efi` 及 `.bin` / `.vmdk` / `.iso` / `.txt` 关键字分类，
+  新命名保留这些关键字，实时下载列表无需改动。
+
+涉及文件：
+
+| 文件 | 改动 |
+| :--- | :--- |
+| `.github/workflows/WRT-CORE.yml` | 新增 `WRT_DATE_SHORT`，与 `WRT_DATE` 由同一次 `date` 取出，避免跨零点导致标签与文件名日期不一致；`Package Firmware` 改用 `WRT_CONFIG` 前缀，按 sed 链从原始产物名剥离平台 / 设备 / `squashfs` 前缀得到镜像类型短标识 |
+| `Scripts/OnlineUpgradePreset.sh` | `firmware_pattern` 改为锚定 `WRT_CONFIG` 与新日期（MTK `^<配置名>-[0-9]+-sysupgrade\.bin$`、X86 `^<配置名>-[0-9]+-combined-efi\.img\.gz$`），删除从 `.config` 的 `TARGET_DEVICE` 反推平台前缀的旧逻辑 |
+| `README.md` | 新增「固件产物命名规则」章节，更新 OTA 预设对照表与 BIOS 镜像正则示例 |
+| 现有 Release | 8 个 Release 共 42 个资产通过 GitHub API `PATCH /releases/assets/{id}` 直接改名，不重新上传文件 |
+
+### 注意：旧固件 OTA 过渡
+
+设备上的 `firmware_pattern` 在构建期固化进 `/etc/config/online-upgrade`，旧固件里仍是
+平台前缀式正则（如 `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$`），
+**无法匹配新命名的资产**。已刷旧固件的设备需手动下载对应 `*-sysupgrade.bin` 刷一次
+（X86 用 `*-combined-efi.img.gz`），或先在 LuCI 里把 `firmware_pattern` 改成新正则，
+之后恢复一键 OTA；新固件出厂预设已是新正则，不受影响。
+
 ## [2026-11-08] 修复 X86 在线升级 Rust 产物自检误判 static-pie（编译成功却红掉）
 
 ### 背景
