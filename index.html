@@ -2320,139 +2320,48 @@
     let currentVariantFilter = 'all'; // 'all', 'next', 'classic', 'modem-pro'
     let searchQuery = '';
 
-    // --- Embedded Verified Fallback Releases (Matches latest actual repository build) ---
-    const FALLBACK_RELEASES = [
-      {
-        tag_name: "H5000M-qmodem-next-immortalwrt-master-26.10.18-06.52.39",
-        name: "H5000M-qmodem-next (最新构建)",
-        published_at: "2026-10-18T06:52:39Z",
-        device: "H5000M",
-        variant: "next",
-        description: "Hiveton H5000M 5G CPE · QModem Next 现代化响应式 JS 前端 · Wi-Fi 7 (160MHz) · 双温感风扇调速",
-        primary_asset: {
-          name: "mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.52.39.bin",
-          size: 75499786,
-          download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/H5000M-qmodem-next-immortalwrt-master-26.10.18-06.52.39/mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.52.39.bin"
-        },
-        extra_assets: [] // H5000M only provides the largest firmware
-      },
-      {
-        tag_name: "H5000M-qmodem-immortalwrt-master-26.10.18-06.53.26",
-        name: "H5000M-qmodem (传统版)",
-        published_at: "2026-10-18T06:53:26Z",
-        device: "H5000M",
-        variant: "classic",
-        description: "Hiveton H5000M 5G CPE · 经典 LuCI 汉化前端 · 5G 模组通用管理 · 双线毫秒切换",
-        primary_asset: {
-          name: "mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.53.26.bin",
-          size: 75210940,
-          download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/H5000M-qmodem-immortalwrt-master-26.10.18-06.53.26/mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.53.26.bin"
-        },
-        extra_assets: []
-      },
-      {
-        tag_name: "AP3000M-qmodem-next-immortalwrt-master-26.10.18-06.51.58",
-        name: "AP3000M-qmodem-next (现代版)",
-        published_at: "2026-10-18T06:51:58Z",
-        device: "AP3000M",
-        variant: "next",
-        description: "AirPi AP3000M (MT7981B) · Wi-Fi 6 (160MHz) · 开机自动写入 EEPROM 校准修复 · QModem Next 前端",
-        primary_asset: {
-          name: "mediatek-filogic-airpi_ap3000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.51.58.bin",
-          size: 72154800,
-          download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/AP3000M-qmodem-next-immortalwrt-master-26.10.18-06.51.58/mediatek-filogic-airpi_ap3000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.51.58.bin"
-        },
-        extra_assets: [] // AP3000M only provides the largest firmware
-      },
-      {
-        tag_name: "AP3000M-qmodem-immortalwrt-master-26.10.18-06.53.30",
-        name: "AP3000M-qmodem (传统版)",
-        published_at: "2026-10-18T06:53:30Z",
-        device: "AP3000M",
-        variant: "classic",
-        description: "AirPi AP3000M (MT7981B) · 经典 LuCI 汉化前端 · 开源 mt76 Wi-Fi 6 · 稳定长效运行",
-        primary_asset: {
-          name: "mediatek-filogic-airpi_ap3000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.53.30.bin",
-          size: 71890000,
-          download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/AP3000M-qmodem-immortalwrt-master-26.10.18-06.53.30/mediatek-filogic-airpi_ap3000m-squashfs-sysupgrade-immortalwrt-master-wifi-yes-26.10.18-06.53.30.bin"
-        },
-        extra_assets: []
-      },
-      {
-        tag_name: "X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10",
-        name: "x86-qmodem-next (现代版)",
-        published_at: "2026-10-18T06:52:10Z",
-        device: "X86",
-        variant: "next",
-        description: "x86_64 通用架构 · EFI 启动 · 多网口工控机 / 软路由 / 虚拟机 · QModem Next 前端",
-        primary_asset: {
-          name: "x86-64-generic-squashfs-combined-efi-immortalwrt-master-wifi-yes-26.10.18-06.52.10.img.gz",
-          size: 89400000,
-          download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10/x86-64-generic-squashfs-combined-efi-immortalwrt-master-wifi-yes-26.10.18-06.52.10.img.gz"
-        },
-        extra_assets: [
-          {
-            format: "BIOS",
-            title: "传统 Legacy BIOS 启动镜像",
-            name: "x86-64-generic-squashfs-combined.img.gz",
-            size: 87200000,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10/x86-64-generic-squashfs-combined-immortalwrt-master-wifi-yes-26.10.18-06.52.10.img.gz"
-          },
-          {
-            format: "VMDK",
-            title: "VMware 虚拟机专用虚拟磁盘",
-            name: "x86-64-generic-combined-efi.vmdk",
-            size: 87200000,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10/x86-64-generic-squashfs-combined-efi-immortalwrt-master-wifi-yes-26.10.18-06.52.10.vmdk"
-          },
-          {
-            format: "ISO",
-            title: "物理机 U盘/光盘直刷镜像",
-            name: "x86-64-generic-image-efi.iso",
-            size: 98500000,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10/x86-64-generic-image-efi-immortalwrt-master-wifi-yes-26.10.18-06.52.10.iso"
-          }
-        ]
-      },
-      {
-        tag_name: "X86-qmodem-immortalwrt-master-26.10.18-06.53.33",
-        name: "x86-qmodem (传统版)",
-        published_at: "2026-10-18T06:53:33Z",
-        device: "X86",
-        variant: "classic",
-        description: "x86_64 通用架构 · 经典 LuCI 汉化前端 · 完备网卡驱动与加解密卸载加速",
-        primary_asset: {
-          name: "x86-64-generic-squashfs-combined-efi-immortalwrt-master-wifi-yes-26.10.18-06.53.33.img.gz",
-          size: 89100000,
-          download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-immortalwrt-master-26.10.18-06.53.33/x86-64-generic-squashfs-combined-efi-immortalwrt-master-wifi-yes-26.10.18-06.53.33.img.gz"
-        },
-        extra_assets: [
-          {
-            format: "BIOS",
-            title: "传统 Legacy BIOS 启动镜像",
-            name: "x86-64-generic-squashfs-combined.img.gz",
-            size: 86900000,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-immortalwrt-master-26.10.18-06.53.33/x86-64-generic-squashfs-combined-immortalwrt-master-wifi-yes-26.10.18-06.53.33.img.gz"
-          },
-          {
-            format: "VMDK",
-            title: "VMware 虚拟机专用虚拟磁盘",
-            name: "x86-64-generic-combined-efi.vmdk",
-            size: 86900000,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-immortalwrt-master-26.10.18-06.53.33/x86-64-generic-squashfs-combined-efi-immortalwrt-master-wifi-yes-26.10.18-06.53.33.vmdk"
-          },
-          {
-            format: "ISO",
-            title: "物理机 U盘/光盘直刷镜像",
-            name: "x86-64-generic-image-efi.iso",
-            size: 98100000,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-immortalwrt-master-26.10.18-06.53.33/x86-64-generic-image-efi-immortalwrt-master-wifi-yes-26.10.18-06.53.33.iso"
-          }
-        ]
-      }
-    ];
+    let allReleases = [];
+    let cloudState = 'loading';   // loading | ok | error
+    let cloudErrorMsg = '';
 
-    let allReleases = FALLBACK_RELEASES;
+    // --- Asset-name parsing ---
+    // 产物命名：<配置名>-<YYYYMMDD>[-<镜像类型>].<扩展名>，配置名本身即
+    // 「机型-模组插件」，因此从资产名即可还原机型、变体与编译日期，不再依赖
+    // Release 标签关键字（标签格式变化时也不会全盘识别错误）。
+    const KNOWN_CONFIGS = [
+      'AP3000M-qmodem-next', 'AP3000M-modem-pro', 'AP3000M-qmodem',
+      'H5000M-qmodem-next', 'H5000M-modem-pro', 'H5000M-qmodem',
+      'X86-qmodem-next', 'X86-qmodem'
+    ].sort((a, b) => b.length - a.length);
+
+    function parseAssetName(name) {
+      for (const cfg of KNOWN_CONFIGS) {
+        if (!name.startsWith(cfg + '-')) continue;
+        const rest = name.slice(cfg.length + 1);
+        const m = rest.match(/^(\d{8})-(.+)$/);
+        if (!m) continue;
+        const d = m[1];
+        return {
+          config: cfg,
+          device: cfg.split('-')[0],
+          variant: cfg.includes('modem-pro') ? 'modem-pro' : (cfg.includes('qmodem-next') ? 'next' : 'classic'),
+          date: d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8)
+        };
+      }
+      return null;
+    }
+
+    function inferDevice(tag) {
+      if (tag.startsWith('AP3000M')) return 'AP3000M';
+      if (tag.startsWith('X86') || tag.startsWith('x86')) return 'X86';
+      return 'H5000M';
+    }
+
+    function inferVariant(tag) {
+      if (tag.includes('modem-pro')) return 'modem-pro';
+      if (tag.includes('qmodem-next')) return 'next';
+      return 'classic';
+    }
 
     // --- Format Bytes Utility ---
     function formatBytes(bytes, decimals = 1) {
@@ -2532,6 +2441,28 @@
     // --- Render Releases Function ---
     function renderReleases() {
       const container = document.getElementById('releasesContainer');
+      if (cloudState === 'loading') {
+        container.innerHTML = `
+          <div style="grid-column:1/-1; background:var(--bg-solid); backdrop-filter:blur(8px); border:1px solid var(--border-card); border-radius:14px; padding:40px; text-align:center; color:var(--text-muted);">
+            <p style="font-weight:700; font-size:1.1rem; color:var(--text-main);">正在从 GitHub 获取最新固件…</p>
+            <p style="font-size:0.88rem; margin-top:4px;">首次加载约需 1 秒，请稍候</p>
+          </div>
+        `;
+        return;
+      }
+      if (cloudState === 'error') {
+        container.innerHTML = `
+          <div style="grid-column:1/-1; background:var(--bg-solid); backdrop-filter:blur(8px); border:1px solid var(--border-card); border-radius:14px; padding:40px; text-align:center; color:var(--text-muted);">
+            <p style="font-weight:700; font-size:1.1rem; color:var(--text-main);">云端 Release 获取失败</p>
+            <p style="font-size:0.88rem; margin-top:4px;">${cloudErrorMsg} · 可直接前往 GitHub Releases 页下载</p>
+            <div style="margin-top:16px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+              <button class="copy-btn" onclick="fetchLiveReleases()">重新获取</button>
+              <a href="https://github.com/LianXia233/H5000M-CI-Qmodem/releases" target="_blank" rel="noopener noreferrer" class="copy-btn">打开 GitHub Releases</a>
+            </div>
+          </div>
+        `;
+        return;
+      }
       const filtered = allReleases.filter(rel => {
         // Device check
         if (currentDeviceFilter !== 'all' && rel.device !== currentDeviceFilter) return false;
@@ -2539,7 +2470,12 @@
         if (currentVariantFilter !== 'all' && rel.variant !== currentVariantFilter) return false;
         // Search check
         if (searchQuery) {
-          const haystack = (rel.name + ' ' + rel.tag_name + ' ' + (rel.primary_asset ? rel.primary_asset.name : '')).toLowerCase();
+          const haystack = [
+            rel.name, rel.tag_name, rel.config || '', rel.build_date || '',
+            rel.device, rel.variant,
+            rel.primary_asset ? rel.primary_asset.name : '',
+            ...(rel.extra_assets || []).map(a => a.name)
+          ].join(' ').toLowerCase();
           if (!haystack.includes(searchQuery)) return false;
         }
         return true;
@@ -2564,8 +2500,36 @@
         };
         const variantBadge = variantBadgeMap[rel.variant] || variantBadgeMap['classic'];
         
-        const primaryUrl = rel.primary_asset ? transformUrl(rel.primary_asset.download_url) : '#';
-        const primarySize = rel.primary_asset ? formatBytes(rel.primary_asset.size) : '';
+        const hasPrimary = !!rel.primary_asset;
+        const primaryUrl = hasPrimary ? transformUrl(rel.primary_asset.download_url) : '';
+        const primarySize = hasPrimary ? formatBytes(rel.primary_asset.size) : '';
+        const primaryBtnLabel = rel.device === 'X86'
+          ? '下载 UEFI 系统镜像 (推荐)'
+          : '下载完整 Sysupgrade 固件';
+        const primaryBlock = hasPrimary
+          ? `
+              <a href="${primaryUrl}" target="_blank" rel="noopener noreferrer" class="primary-download-btn">
+                <div class="btn-file-info">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span style="max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${primaryBtnLabel}
+                  </span>
+                </div>
+                <span class="btn-file-size">${primarySize}</span>
+              </a>
+
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <button class="copy-btn" onclick="copyText('${primaryUrl}')" style="width:100%; justify-content:center; padding:7px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  复制直接下载链接
+                </button>
+              </div>
+            `
+          : `
+              <div style="padding:14px; border:1px dashed var(--border-card); border-radius:10px; color:var(--text-muted); font-size:0.88rem; text-align:center;">
+                该 Release 未找到匹配的 ${primaryBtnLabel}，请到 GitHub Releases 页查看
+              </div>
+            `;
 
         // H5000M and AP3000M only display the single largest firmware!
         // X86 displays the specialized dropdown with format categories.
@@ -2578,6 +2542,9 @@
               <svg id="extraToggleIcon-${index}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:transform 0.25s ease;"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <div class="release-extra-assets" id="extra-${index}">
+              <div style="padding:8px 12px; font-size:0.78rem; color:var(--text-muted); border-bottom:1px solid var(--border-card);">
+                UEFI 与 Legacy BIOS 镜像分区表不同，请按机器实际引导方式选择，勿混用
+              </div>
               ${rel.extra_assets.map(asset => {
                 const tagClass = 'tag-' + (asset.format ? asset.format.toLowerCase() : 'cfg');
                 const downloadUrl = transformUrl(asset.download_url);
@@ -2600,10 +2567,6 @@
           `;
         }
 
-        const primaryBtnLabel = rel.device === 'X86' 
-          ? '下载 UEFI 系统镜像 (推荐)' 
-          : '下载完整 Sysupgrade 固件';
-
         return `
           <div class="release-card">
             <div>
@@ -2617,10 +2580,10 @@
               <div class="release-meta">
                 <span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                  ${rel.published_at.substring(0, 10)}
+                  ${rel.build_date ? '编译 ' + rel.build_date : rel.published_at.substring(0, 10)}
                 </span>
                 <span style="font-family:'JetBrains Mono',monospace; font-size:0.75rem; background:rgba(255, 255, 255, 0.7); padding:2px 6px; border-radius:4px; border:1px solid #e2e8f0;">
-                  ${rel.tag_name.split('-').slice(-2).join('-')}
+                  ${rel.config || rel.tag_name.split('-').slice(-2).join('-')}
                 </span>
               </div>
 
@@ -2628,22 +2591,7 @@
             </div>
 
             <div class="release-asset-box">
-              <a href="${primaryUrl}" target="_blank" rel="noopener noreferrer" class="primary-download-btn">
-                <div class="btn-file-info">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  <span style="max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                    ${primaryBtnLabel}
-                  </span>
-                </div>
-                <span class="btn-file-size">${primarySize}</span>
-              </a>
-
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <button class="copy-btn" onclick="copyText('${primaryUrl}')" style="width:100%; justify-content:center; padding:7px;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                  复制直接下载链接
-                </button>
-              </div>
+              ${primaryBlock}
 
               ${extraHtml}
             </div>
@@ -2671,87 +2619,86 @@
     // --- Live Fetch Releases from GitHub API ---
     async function fetchLiveReleases() {
       const btn = document.getElementById('refreshBtnText');
-      btn.textContent = '正在获取...';
+      if (btn) btn.textContent = '正在获取...';
+      cloudState = 'loading';
+      renderReleases();
       try {
-        const response = await fetch('https://api.github.com/repos/LianXia233/H5000M-CI-Qmodem/releases?per_page=12');
-        if (!response.ok) throw new Error('API Rate Limit or Error');
+        // 8 个配置各一个 Release，100 足够覆盖后续增长，避免 12 条上限截断
+        const response = await fetch('https://api.github.com/repos/LianXia233/H5000M-CI-Qmodem/releases?per_page=100');
+        if (!response.ok) throw new Error('GitHub API 返回 HTTP ' + response.status);
         const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const parsed = [];
-          data.forEach(rel => {
-            const tag = rel.tag_name || '';
-            let dev = 'H5000M';
-            if (tag.startsWith('AP3000M')) dev = 'AP3000M';
-            else if (tag.startsWith('X86') || tag.startsWith('x86')) dev = 'X86';
+        if (!Array.isArray(data) || data.length === 0) throw new Error('仓库暂无 Release');
 
-            let variant = 'classic';
-            if (tag.includes('modem-pro')) variant = 'modem-pro';
-            else if (tag.includes('qmodem-next')) variant = 'next';
-            const variantLabel = variant === 'modem-pro' ? 'Modem Pro 统一版' : (variant === 'next' ? 'QModem Next' : '经典 LuCI');
+        const parsed = [];
+        data.forEach(rel => {
+          const tag = rel.tag_name || '';
+          const assets = rel.assets || [];
 
-            let primary = null;
-            const extras = [];
-
-            if (dev === 'H5000M' || dev === 'AP3000M') {
-              // H5000M and AP3000M: only pick the largest firmware file!
-              let largest = null;
-              (rel.assets || []).forEach(a => {
-                if (a.name.endsWith('.bin') && (!largest || a.size > largest.size)) {
-                  largest = a;
-                }
-              });
-              if (!largest && rel.assets && rel.assets.length > 0) {
-                largest = rel.assets.reduce((max, a) => a.size > max.size ? a : max, rel.assets[0]);
-              }
-              if (largest) {
-                primary = { name: largest.name, size: largest.size, download_url: largest.browser_download_url };
-              }
-              // No extra assets for H5000M or AP3000M
-            } else if (dev === 'X86') {
-              // X86: categorize formats cleanly
-              (rel.assets || []).forEach(a => {
-                if (a.name.includes('combined-efi') && a.name.endsWith('.img.gz')) {
-                  primary = { name: a.name, size: a.size, download_url: a.browser_download_url };
-                } else if (a.name.endsWith('.vmdk')) {
-                  extras.push({ format: 'VMDK', title: 'VMware 虚拟机专用虚拟磁盘', name: a.name, size: a.size, download_url: a.browser_download_url });
-                } else if (a.name.endsWith('.iso')) {
-                  extras.push({ format: 'ISO', title: '物理机 U盘/光盘直刷镜像', name: a.name, size: a.size, download_url: a.browser_download_url });
-                } else if (a.name.includes('combined') && a.name.endsWith('.img.gz')) {
-                  extras.push({ format: 'BIOS', title: '传统 Legacy BIOS 启动镜像', name: a.name, size: a.size, download_url: a.browser_download_url });
-                }
-              });
-              if (!primary && rel.assets && rel.assets.length > 0) {
-                primary = { name: rel.assets[0].name, size: rel.assets[0].size, download_url: rel.assets[0].browser_download_url };
-              }
-            }
-
-            parsed.push({
-              tag_name: tag,
-              name: rel.name || tag,
-              published_at: rel.published_at || new Date().toISOString(),
-              device: dev,
-              variant: variant,
-              description: dev === 'H5000M' 
-                ? `Hiveton H5000M 5G CPE · ${variantLabel} 前端 · Wi-Fi 7 (160MHz) · 双温感风扇调速`
-                : (dev === 'AP3000M' 
-                    ? `AirPi AP3000M · Wi-Fi 6 (160MHz) · ${variantLabel} · 开机自动写入 EEPROM 校准修复`
-                    : `x86_64 通用架构 · ${variantLabel} · 支持 UEFI / BIOS / VMware / ISO`),
-              primary_asset: primary,
-              extra_assets: extras
-            });
-          });
-
-          if (parsed.length > 0) {
-            allReleases = parsed;
-            renderReleases();
-            showToast('已同步最新云端 Releases 固件');
+          // 产物名已含「配置名 + 编译日期」，优先据此识别机型/变体/日期；
+          // 仅当资产名不匹配（历史遗留命名）时才回退到标签关键字。
+          let info = null;
+          for (const a of assets) {
+            info = parseAssetName(a.name);
+            if (info) break;
           }
-        }
+          const dev = info ? info.device : inferDevice(tag);
+          const variant = info ? info.variant : inferVariant(tag);
+          const variantLabel = variant === 'modem-pro' ? 'Modem Pro 统一版' : (variant === 'next' ? 'QModem Next' : '经典 LuCI');
+
+          // 主固件按白名单精确匹配，绝不用 assets[0] 兜底 —— 那可能是 vmdk/iso
+          const primaryFile = dev === 'X86'
+            ? assets.find(a => a.name.endsWith('-combined-efi.img.gz'))
+            : assets.find(a => a.name.endsWith('-sysupgrade.bin'));
+          const primary = primaryFile
+            ? { name: primaryFile.name, size: primaryFile.size, download_url: primaryFile.browser_download_url }
+            : null;
+
+          // X86 其余镜像按 UEFI / Legacy BIOS 分别标注：两种分区表不能混用。
+          const extras = [];
+          if (dev === 'X86') {
+            assets.forEach(a => {
+              const n = a.name;
+              if (primaryFile && n === primaryFile.name) return;
+              const base = { name: n, size: a.size, download_url: a.browser_download_url };
+              if (n.endsWith('-combined-efi.vmdk')) extras.push({ ...base, format: 'VMDK', title: 'VMware 虚拟磁盘 · UEFI 启动' });
+              else if (n.endsWith('-combined.vmdk')) extras.push({ ...base, format: 'VMDK', title: 'VMware 虚拟磁盘 · Legacy BIOS' });
+              else if (n.endsWith('-image-efi.iso')) extras.push({ ...base, format: 'ISO', title: 'U盘/光盘直刷镜像 · UEFI 启动' });
+              else if (n.endsWith('-image.iso')) extras.push({ ...base, format: 'ISO', title: 'U盘/光盘直刷镜像 · Legacy BIOS' });
+              else if (n.endsWith('-combined.img.gz')) extras.push({ ...base, format: 'BIOS', title: 'Legacy BIOS 磁盘镜像 · 非 UEFI' });
+            });
+          }
+
+          parsed.push({
+            tag_name: tag,
+            name: rel.name || tag,
+            published_at: rel.published_at || new Date().toISOString(),
+            device: dev,
+            variant: variant,
+            build_date: info ? info.date : '',
+            config: info ? info.config : '',
+            description: dev === 'H5000M'
+              ? `Hiveton H5000M 5G CPE · ${variantLabel} 前端 · Wi-Fi 7 (160MHz) · 双温感风扇调速`
+              : (dev === 'AP3000M'
+                  ? `AirPi AP3000M · Wi-Fi 6 (160MHz) · ${variantLabel} · 开机自动写入 EEPROM 校准修复`
+                  : `x86_64 通用架构 · ${variantLabel} · 支持 UEFI / BIOS / VMware / ISO`),
+            primary_asset: primary,
+            extra_assets: extras
+          });
+        });
+
+        if (parsed.length === 0) throw new Error('未解析出可用固件');
+        allReleases = parsed;
+        cloudState = 'ok';
+        renderReleases();
+        showToast('已同步最新云端 Releases 固件');
       } catch (err) {
-        console.warn('Using pre-cached fallback releases:', err);
-        showToast('已加载内置精选固件源');
+        console.warn('云端 Release 获取失败:', err);
+        cloudState = 'error';
+        cloudErrorMsg = (err && err.message) ? err.message : '未知错误';
+        renderReleases();
+        showToast('云端获取失败，请检查网络或稍后重试');
       } finally {
-        btn.textContent = '刷新云端 Release';
+        if (btn) btn.textContent = '刷新云端 Release';
       }
     }
 

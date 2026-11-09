@@ -847,6 +847,23 @@ jobs:
             echo "=== 待发布固件（$UPLOAD_COUNT 个）==="
             ls -lh ./upload/
 
+            # 固件 SHA256 表：luci-app-online-upgrade v2 的 github.rs 会依次找
+            # expected_sha256 配置 -> sha256sums / <固件>.sha256 资产 -> Release
+            # 正文里「含目标文件名的 64 位 hex 行」。CI 已过滤掉所有非固件资产，
+            # 因此把标准 sha256sum 格式（<hash>  <文件名>）写进 Release 正文，
+            # 既能让 OTA 真正比对完整性，又不新增任何资产。
+            # $GITHUB_ENV 用 heredoc 传多行值，Release body 再以环境变量引用。
+            {
+              echo "WRT_SHA256_TABLE<<WRT_SHA256_EOF"
+              echo ""
+              echo "### 固件校验（SHA256）"
+              echo ""
+              echo '```'
+              ( cd ./upload && sha256sum * )
+              echo '```'
+              echo "WRT_SHA256_EOF"
+            } >> "$GITHUB_ENV"
+
             make clean -j$(nproc)
           fi
 
@@ -885,6 +902,7 @@ jobs:
 
             内核版本：${{env.WRT_KVER}}
             插件列表：${{env.WRT_LIST}}
+            ${{env.WRT_SHA256_TABLE}}
 
       # save-always 已弃用且行为不可靠，改为独立的 restore/save 两步。
       # save 放在作业末尾并用 always()，保留「即使前面步骤失败也保存缓存」的语义；

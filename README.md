@@ -153,23 +153,34 @@ glob。删除 manifest 之前已把内核版本与插件列表写入 `GITHUB_ENV
   判定插件是否存在（上游 `98a966a` 已修），避免刷机首启误判「插件丢失」而下载外部
   `.apk` 覆盖自编二进制；导入脚本按内容幂等校验，并核对 Makefile 安装项、
   守卫判定、预编译落点三处同为该路径。
+- **固件完整性校验**：`Package Firmware` 在发布前计算每个固件的 SHA256，以标准
+  `sha256sum` 格式写进 Release 正文；上游 `github.rs` 的 `find_sha256_in_text`
+  按资产名取到后执行真实比对，不新增任何资产，与「Release 只留固件」一致；
 
 各机型预设对照（`<配置名>` 即 `WRT_CONFIG`，形如 `机型-模组插件`；`<owner>` 为本次编译所用源码仓库 owner）：
 
 | 机型配置 | `tag` | `firmware_pattern` |
 | :--- | :--- | :--- |
-| `H5000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<配置名>-<owner>-` | `^<配置名>-[0-9]+-sysupgrade\.bin$` |
-| `AP3000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<配置名>-<owner>-` | `^<配置名>-[0-9]+-sysupgrade\.bin$` |
-| `X86-qmodem` / `-qmodem-next` | `latest@^<配置名>-<owner>-` | `^<配置名>-[0-9]+-combined-efi\.img\.gz$` |
+| `H5000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<配置名>-<owner>-<分支>-` | `^<配置名>-[0-9]+-sysupgrade\.bin$` |
+| `AP3000M-qmodem` / `-qmodem-next` / `-modem-pro` | `latest@^<配置名>-<owner>-<分支>-` | `^<配置名>-[0-9]+-sysupgrade\.bin$` |
+| `X86-qmodem` / `-qmodem-next` | `latest@^<配置名>-<owner>-<分支>-` | `^<配置名>-[0-9]+-combined-efi\.img\.gz$` |
 
 说明：
 
-- `tag` 必须带 `<owner>-` 锚定：`H5000M-qmodem` 是 `H5000M-qmodem-next` 的字符串前缀，
-  只写 `^H5000M-qmodem-` 会让前者命中后者的发布；
+- `tag` 三段锚定 `<配置名>-<owner>-<分支>-`：`H5000M-qmodem` 是
+  `H5000M-qmodem-next` 的字符串前缀，只写 `^H5000M-qmodem-` 会让前者命中后者的
+  发布；再锚定分支可防止同一 owner 换分支编译时跨分支取最新，分支名中的 `.`
+  会转义成 `\.` 再拼进正则；
 - X86 的 BIOS/Legacy 机器需把 `firmware_pattern` 改成
   `^<配置名>-[0-9]+-combined\.img\.gz$`（两种镜像分区表不同，不能混用）；
 - 上游默认配置里的 `enabled` / `keep_config` 在 v2 的 Rust 与 rpcd 代码中**未被读取**，
-  预设不写入这两个键，避免"配了却不起作用"；升级前的配置保留由插件自身逻辑决定。
+  预设不写入这两个键，避免"配了却不起作用"；升级前的配置保留由插件自身逻辑决定；
+- `expected_sha256` 不写进预设：那是「本次 Release 的固定值」，出厂固化会让之后
+  每个版本都拿旧哈希比对；校验依据改由 Release 正文按资产名提供；
+- 上游 `version::pick` 取文本里最后一个点分数字，产物名 `<配置名>-<YYYYMMDD>-...`
+  不含点分版本，会回退到 Release 标签并把末尾 `HH.MM.SS` 构建时间当作版本；
+  是否升级主要由资产 `updated_at` 判定，版本字段仅用于展示与同版本比较，
+  本次按约定未改标签格式。
 
 > [!WARNING]
 > **旧固件 OTA 过渡**：产物改用 `机型-模组插件-编译日期` 命名后，旧固件里固化的

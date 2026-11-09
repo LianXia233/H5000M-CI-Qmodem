@@ -17,9 +17,14 @@
 #   rust/src/uci.rs          const BASE = "online-upgrade.settings"
 #   rust/src/github.rs       repo / tag / proxy / firmware_pattern / min_size_mb
 #   rust/src/downloader.rs   dl_workers / dl_chunk_mb / dl_stall_sec / dl_retries
-#   rust/src/upgrade.rs      expected_sha256（自定义校验值，留空则用 Release 资产的）
+#   rust/src/upgrade.rs      expected_sha256（自定义校验值，留空则用 Release 的）
 # 上游默认配置里的 enabled / keep_config / last_upgrade_version 在本版本 Rust 与
 # rpcd 代码中均未被读取，故不写入预设，避免「配了却不起作用」的假象。
+#
+# SHA256 不写进预设：expected_sha256 是「本次 Release 的固定值」，出厂固化会让
+# 之后每个版本都拿旧哈希去比对。WRT-CORE 改为把每个固件的 sha256sum 写进
+# Release 正文，上游 github.rs 的 find_sha256_in_text 会按资产名自动取到，
+# 既不新增资产、也不占用 UCI 键。
 #
 # 用法（在 OpenWrt 源码树根目录，defconfig 之前由 Settings.sh 调用）：
 #   Scripts/OnlineUpgradePreset.sh
@@ -28,8 +33,10 @@ set -euo pipefail
 
 WRT_CONFIG="${WRT_CONFIG:-}"
 WRT_INFO="${WRT_INFO:-}"
+WRT_BRANCH="${WRT_BRANCH:-}"
 TARGET="./files/etc/config/online-upgrade"
-UPGRADE_REPO="${ONLINE_UPGRADE_SOURCE_REPO:-LianXia233/H5000M-CI-QModem}"
+# 与 GitHub 上的仓库名大小写保持一致（API 不区分大小写，预设里不留歧义）
+UPGRADE_REPO="${ONLINE_UPGRADE_SOURCE_REPO:-LianXia233/H5000M-CI-Qmodem}"
 
 # 包未选中时不生成预设：文件会随 files/ 打进固件，但设备上没有对应软件，
 # 只会留下一个没人读的配置。Config/GENERAL.txt 默认选中它，这里只是防御。
@@ -63,11 +70,20 @@ esac
 
 # tag 语义来自 rust/src/github.rs：latest 取最新 Release，
 # latest@<正则> 只在该正则匹配的 Tag 里找最新。
-# 这里锚定「配置名-源码 owner-」：
-#   Release 标签格式为 <WRT_CONFIG>-<WRT_INFO>-<WRT_BRANCH>-<WRT_DATE>；
-#   只写 ^<WRT_CONFIG>- 会让 H5000M-qmodem 命中 H5000M-qmodem-next 的发布
-#   （前者是后者的字符串前缀），加上 <WRT_INFO>- 后两者不会互相误匹配。
-TAG="latest@^${WRT_CONFIG}-${WRT_INFO}-"
+#   Release 标签格式为 <WRT_CONFIG>-<WRT_INFO>-<WRT_BRANCH>-<WRT_DATE>。
+# 三段锚定的必要性：
+#   - 只写 ^<WRT_CONFIG>- 会让 H5000M-qmodem 命中 H5000M-qmodem-next 的发布
+#     （前者是后者的字符串前缀）；
+#   - 追加 <WRT_INFO>-（源码 owner）后两者不再互相误匹配；
+#   - 再追加 <WRT_BRANCH>- 可防止同一 owner 换分支编译时跨分支取最新。
+# 分支名可能含点（如 openwrt-24.10），正则里 . 是通配符，需转义成 \. 。
+BRANCH_RE="${WRT_BRANCH//./\\.}"
+if [ -n "$BRANCH_RE" ]; then
+	TAG="latest@^${WRT_CONFIG}-${WRT_INFO}-${BRANCH_RE}-"
+else
+	# 非 CI 手动调用、未提供分支时退回两段锚定，仍不会跨变体误匹配
+	TAG="latest@^${WRT_CONFIG}-${WRT_INFO}-"
+fi
 
 mkdir -p "$(dirname "$TARGET")"
 {
@@ -101,5 +117,25 @@ grep -qF "option firmware_pattern '${PATTERN}'" "$TARGET" || {
 	echo "::error::${TARGET} 的 firmware_pattern 与推导值不一致"
 	exit 1
 }
+grep -qF "option repo '${UPGRADE_REPO}'" "$TARGET" || {
+	echo "::error::${TARGET} 的 repo 与推导值不一致"
+	exit 1
+}
+
+# 正则自检：构造示例产物名 / 示例标签，确认两条规则真能命中，
+# 避免上游 Regex::new 编译失败或锚点写错导致设备端 OTA 找不到固件。
+case "$WRT_CONFIG" in
+	X86-*) SAMPLE="${WRT_CONFIG}-20261109-combined-efi.img.gz" ;;
+	*)     SAMPLE="${WRT_CONFIG}-20261109-sysupgrade.bin" ;;
+esac
+if [[ ! "$SAMPLE" =~ $PATTERN ]]; then
+	echo "::error::firmware_pattern 未匹配示例产物 ${SAMPLE}（规则=${PATTERN}）"
+	exit 1
+fi
+SAMPLE_TAG="${WRT_CONFIG}-${WRT_INFO}-${WRT_BRANCH:-master}-26.11.09-08.31.52"
+if [[ ! "$SAMPLE_TAG" =~ ${TAG#latest@} ]]; then
+	echo "::error::tag 正则未匹配示例标签 ${SAMPLE_TAG}（规则=${TAG}）"
+	exit 1
+fi
 
 echo "==> 在线升级预设：机型=${WRT_CONFIG} tag正则=${TAG} 资产正则=${PATTERN}"

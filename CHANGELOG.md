@@ -1,5 +1,40 @@
 # 更新日志
 
+## [2026-11-10] 优化 luci-app-online-upgrade 适配与落地页资产识别
+
+### 背景
+
+逐行核对上游 v2 Rust 后端后确认三点：`firmware_pattern` 命中后走
+`evaluate_with_rule`，新命名的资产不会被判架构冲突（上轮改名未破坏 OTA）；
+但 SHA256 校验上游依次找 `expected_sha256` 配置 → `sha256sums` / `<固件>.sha256`
+资产 → Release 正文，而 CI 一直删除 `sha256sums`、正文也没有哈希，结果
+`hash_source=none`，只记录本地 SHA256 **不比对**；此外 `tag` 正则只锚定到 owner，
+未来换分支会跨分支取最新。
+
+### 改动
+
+- `WRT-CORE.yml`：Package Firmware 自检后计算 `upload/` 内每个固件的
+  `sha256sum`，以 `$GITHUB_ENV` heredoc 写入 `WRT_SHA256_TABLE` 并追加到
+  Release body，上游 `find_sha256_in_text` 按资产名自动取到，启用真实校验，
+  **不新增任何资产**；
+- `Scripts/OnlineUpgradePreset.sh`：`repo` 统一为 `H5000M-CI-Qmodem`；
+  `tag` 正则加锚定分支（分支名中的 `.` 转义），新增 `repo` / `tag` /
+  `firmware_pattern` 与示例产物、示例标签的正则命中自检；
+- `index.html`：按资产名反推机型 / 变体 / 编译日期（标签关键字仅兜底）、
+  主固件按白名单精确选取、X86 的 VMDK / ISO 区分 UEFI 与 BIOS、卡片展示编译日期、
+  `per_page=100`、搜索纳入扩展资产与日期；移除 2026-10-18 全 404 的内置兜底数据，
+  改为加载态、「云端不可用」提示与重试按钮；
+- `README.md`：补充 OTA 校验来源、三段 tag 锚定与版本解析限制说明。
+
+### 生效范围
+
+现有 8 个 Release 的正文已通过 API 补齐 SHA256（直接取用资产 `digest`，未下载
+固件、未改动任何已发布资产）；下次构建起由 CI 自动生成。标签格式与产物命名
+均未改动，设备端 `firmware_pattern` 仍可命中；已知限制是上游版本解析会回退到
+标签并把末尾 `HH.MM.SS` 当版本，本次按约定不改标签格式。
+
+---
+
 ## [2026-11-10] 过滤 CI 非固件文件，Release 只保留完整固件
 
 ### 背景
