@@ -70,7 +70,7 @@ jobs:
     timeout-minutes: 345
     steps:
       - name: Checkout Projects
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Apt Mirror
         # azure.archive.ubuntu.com 会间歇性退化到几十 kB/s 且不报错，而内置
@@ -329,11 +329,11 @@ jobs:
       - name: Check Caches (Toolchain & ccache)
         id: check-cache
         if: env.WRT_TEST != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v5
         with:
-          # 编译失败或超时也要保存：工具链（含最耗时的 rust/host）在头 1~2 小时就编好了，
+          # 保存改由作业末尾的 actions/cache/save 步骤完成（always()，前面步骤失败也保存）：
+          # 工具链（含最耗时的 rust/host）在头 1~2 小时就编好了，
           # 不保存的话下次依旧从头冷编译，会陷入「超时→无缓存→再超时」的死循环
-          save-always: true
           # 关键改动：缓存键只绑定「目标平台 + 源码 + 分支」，不再绑定 commit hash。
           # 上游一有新提交也能通过 restore-keys 回退命中上次编译好的工具链。
           key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
@@ -345,12 +345,11 @@ jobs:
             ./wrt/staging_dir/tool*
 
       - name: Check Caches (Download)
+        id: check-cache-dl
         if: env.WRT_TEST != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v5
         with:
-          # 编译失败或超时也要保存：工具链（含最耗时的 rust/host）在头 1~2 小时就编好了，
-          # 不保存的话下次依旧从头冷编译，会陷入「超时→无缓存→再超时」的死循环
-          save-always: true
+          # 保存同样由末尾的 actions/cache/save 步骤完成，编译失败也保留已下载的源码包
           # 下载的源码包与机型无关，按「源码 + 分支」单独缓存，避免多机型各存一份
           key: wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
           restore-keys: |
@@ -809,7 +808,7 @@ jobs:
 
       - name: Release Firmware
         if: env.WRT_TEST != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
           files: ./wrt/upload/*.*
@@ -833,3 +832,24 @@ jobs:
 
             内核版本：${{env.WRT_KVER}}
             插件列表：${{env.WRT_LIST}}
+
+      # save-always 已弃用且行为不可靠，改为独立的 restore/save 两步。
+      # save 放在作业末尾并用 always()，保留「即使前面步骤失败也保存缓存」的语义；
+      # key 复用 restore 解析出的主键，确保与恢复时的键完全一致。
+      - name: Save Caches (Toolchain & ccache)
+        if: always() && env.WRT_TEST != 'true' && steps.check-cache.outputs.cache-primary-key != '' && steps.check-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ steps.check-cache.outputs.cache-primary-key }}
+          path: |
+            ./wrt/.ccache
+            ./wrt/staging_dir/host*
+            ./wrt/staging_dir/tool*
+
+      - name: Save Caches (Download)
+        if: always() && env.WRT_TEST != 'true' && steps.check-cache-dl.outputs.cache-primary-key != '' && steps.check-cache-dl.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ steps.check-cache-dl.outputs.cache-primary-key }}
+          path: |
+            ./wrt/dl
