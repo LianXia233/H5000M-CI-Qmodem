@@ -48,22 +48,37 @@ Release 产物统一按 `机型-模组插件-编译日期[-镜像类型].扩展�
 编译日期取构建当天 `YYYYMMDD`（`Asia/Shanghai`）。仅凭文件名即可分辨同机型的
 QModem Next / QModem / Modem Pro 三套变体，无需再对照 Release 标签。
 
+**Release 只发布可直接刷写的完整固件**，命名示例：
+
 | 产物 | 文件名示例 |
 | :--- | :--- |
 | MTK sysupgrade 固件（Next） | `H5000M-qmodem-next-20261109-sysupgrade.bin` |
 | MTK sysupgrade 固件（传统版） | `H5000M-qmodem-20261109-sysupgrade.bin` |
 | MTK sysupgrade 固件（Modem Pro） | `H5000M-modem-pro-20261109-sysupgrade.bin` |
-| 软件包清单 | `H5000M-qmodem-next-20261109.manifest` |
-| 编译配置存档 | `H5000M-qmodem-next-20261109.config.txt` |
 | X86 UEFI 镜像 | `X86-qmodem-next-20261109-combined-efi.img.gz` |
 | X86 Legacy BIOS 镜像 | `X86-qmodem-next-20261109-combined.img.gz` |
-| X86 VMware 虚拟磁盘 | `X86-qmodem-next-20261109-combined-efi.vmdk` |
+| X86 VMware 虚拟磁盘（UEFI / BIOS） | `X86-qmodem-next-20261109-combined-efi.vmdk` / `-combined.vmdk` |
+| X86 ISO 镜像（UEFI / BIOS） | `X86-qmodem-next-20261109-image-efi.iso` / `-image.iso` |
 
-- **镜像类型后缀不可省**：X86 单次构建产出 12 个不同格式的镜像（EFI / BIOS、
-  `img.gz` / `vmdk` / `iso`、`rootfs`、`kernel` 等），去掉后会互相覆盖；
+- **镜像类型后缀不可省**：X86 单次构建产出 6 个完整镜像（EFI / BIOS 的
+  `img.gz`、`vmdk`、`iso`），去掉后会互相覆盖；
 - 源码仓库、分支、`wifi-yes` 与精确到秒的时间戳不再塞进文件名，仍完整保留在
   Release 标签与描述中；
 - Release 标签格式不变：`<配置名>-<源码owner>-<分支>-<YY.MM.DD-HH.MM.SS>`。
+
+#### 非固件文件过滤
+
+`Package Firmware` 按镜像类型白名单精确挑选，**以下文件只留在构建机、不进 Release**：
+
+| 类别 | 典型文件 | 不发布的原因 |
+| :--- | :--- | :--- |
+| 文本元数据 | `*.manifest`、`*.config.txt`、`*.buildinfo`、`*.json`、`sha256sums` | 构建期已把内核版本 / 插件列表写进 Release 描述，无需再附文件 |
+| 内核 / 根文件系统散件 | `*-kernel.bin`、`*-rootfs.img.gz`、`*-rootfs.tar.gz`、`*-targz-rootfs.tar.gz` | 单独不可刷写，仅供开发者二次拼包 |
+| 引导辅助小 bin | `mt798x-ram-*-bl2.bin` 等 DDR 训练辅助镜像 | 不可直接刷写；旧的「<2MB 即非固件」体积启发式会漏掉大体积辅助文件、误删小体积合法固件 |
+
+CI 另有两道闸门兜底：打包结束前自检 `upload/` 非空且每个文件都命中固件文件名
+白名单，不满足即构建失败；`softprops/action-gh-release` 的 `files` 也只列白名单
+glob。删除 manifest 之前已把内核版本与插件列表写入 `GITHUB_ENV`，Release 描述不受影响。
 
 ---
 

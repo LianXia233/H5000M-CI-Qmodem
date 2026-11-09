@@ -783,13 +783,18 @@ jobs:
           cd ./wrt/ && mkdir ./upload/
 
           # 产物统一命名：<机型>-<模组插件>-<编译日期>[-<镜像类型>].<扩展名>
-          # WRT_CONFIG 本身即 "<机型>-<模组插件>"（如 H5000M-qmodem-next）。
-          # 旧命名只带平台 / 源码 owner / 分支 / wifi / 时间戳，同机型三套变体
-          # 下载后完全分不清；现在只靠文件名即可区分 qmodem-next / qmodem /
-          # modem-pro。镜像类型后缀必须保留：X86 单次构建产出 12 个不同格式的
-          # 镜像，去掉后会互相覆盖。源码与时间戳等冗余信息仍完整保留在 Release
-          # 标签与描述里，不再塞进文件名。
-          cp -f ./.config ./upload/"$WRT_CONFIG"-"$WRT_DATE_SHORT".config.txt
+          # WRT_CONFIG 本身即 "<机型>-<模组插件>"（如 H5000M-qmodem-next），
+          # 只靠文件名即可区分 qmodem-next / qmodem / modem-pro。镜像类型后缀
+          # 必须保留：X86 单次构建产出多个完整镜像格式，去掉后会互相覆盖。
+          # 源码与时间戳等冗余信息保留在 Release 标签与描述里，不再塞进文件名。
+          #
+          # 只发布「可直接刷写的完整固件」，其余一律不进 upload：
+          #   白名单 slug：sysupgrade / factory / combined(-efi) / image(-efi)
+          #   过滤：manifest、config.txt、kernel.bin、rootfs.*、targz-rootfs.*，
+          #         以及 mt798x-ram-*-bl2 等不含 WRT_TARGET 的 DDR 引导辅助小 bin
+          # 旧逻辑是「先全部搬进 upload，再按 <2MB 删小 bin」的黑名单：≥2MB 的
+          # 辅助 bin 会漏网，<2MB 的合法固件又会被误删，兜底搬运还会把元数据
+          # 无差别带进 Release。现在改为按镜像类型精确挑选，从源头杜绝杂项。
 
           if [[ $WRT_TEST != 'true' ]]; then
             echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> $GITHUB_ENV
@@ -811,27 +816,36 @@ jobs:
                 -e 's/^mediatek-filogic-//' \
                 -e 's/^x86-64-//' \
                 -e 's/^squashfs-//')"
+              # 白名单：只有完整固件镜像才允许进入 upload / Release。case 精确
+              # 匹配，避免 rootfs / kernel / targz-rootfs / initramfs 调试镜像
+              # 与 manifest 空值混进来；非白名单文件留在 bin/targets 随 make
+              # clean 回收，不进 upload。
               case "$IMG_SLUG" in
-                ''|mediatek-filogic|x86-64|x86-64-generic) IMG_SLUG="" ;;
+                sysupgrade|factory|combined|combined-efi|image|image-efi)
+                  NEW_FILE="$WRT_CONFIG-$WRT_DATE_SHORT-$IMG_SLUG.$EXT"
+                  mv -f "$FILE" ./upload/"$NEW_FILE"
+                  echo "[keep]   $(basename "$FILE") -> $NEW_FILE" ;;
+                *)
+                  echo "[filter] $(basename "$FILE") (slug=${IMG_SLUG:-空})" ;;
               esac
-
-              if [ -n "$IMG_SLUG" ]; then
-                NEW_FILE="$WRT_CONFIG-$WRT_DATE_SHORT-$IMG_SLUG.$EXT"
-              else
-                NEW_FILE="$WRT_CONFIG-$WRT_DATE_SHORT.$EXT"
-              fi
-              mv -f "$FILE" ./upload/"$NEW_FILE"
             done
 
-            find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
-
-            # 过滤非固件小文件：mediatek 目标编译时会把 mt798x-ram-*-bl2 等
-            # DDR 引导辅助 bin（<1MB，仅供开发者二次拼包，不可直接刷写）输出到
-            # bin/targets，上面的兜底搬运会把它带进 upload。真正的固件 bin 都是
-            # 几十 MB 的 sysupgrade / factory / kernel 镜像，按「.bin 且小于 2MB
-            # 即非固件」过滤，Release 页面只保留正常固件与 Config / manifest
-            # 等文本辅助文件。-print 把被删文件记进日志，便于事后核对。
-            find ./upload/ -type f -iname "*.bin" -size -2M -print -delete
+            # 发布前自检：upload 必须非空，且每个文件都命中固件文件名白名单。
+            # 上游产物结构变化时宁可构建失败，也不要发空 Release 或混进杂项。
+            UPLOAD_COUNT=$(find ./upload/ -maxdepth 1 -type f | wc -l)
+            if [ "$UPLOAD_COUNT" -eq 0 ]; then
+              echo "::error::upload 为空，未产出任何完整固件，拒绝发布"
+              exit 1
+            fi
+            for f in ./upload/*; do
+              [ -f "$f" ] || continue
+              case "$(basename "$f")" in
+                *-sysupgrade.bin|*-factory.bin|*-combined.img.gz|*-combined.vmdk|*-combined-efi.img.gz|*-combined-efi.vmdk|*-image.iso|*-image-efi.iso) ;;
+                *) echo "::error::upload 出现非固件文件：$(basename "$f")"; exit 1 ;;
+              esac
+            done
+            echo "=== 待发布固件（$UPLOAD_COUNT 个）==="
+            ls -lh ./upload/
 
             make clean -j$(nproc)
           fi
@@ -841,7 +855,16 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
-          files: ./wrt/upload/*.*
+          # 第二道闸门：即使打包环节漏进杂项，Release 也只发布白名单 glob
+          files: |
+            ./wrt/upload/*-sysupgrade.bin
+            ./wrt/upload/*-factory.bin
+            ./wrt/upload/*-combined.img.gz
+            ./wrt/upload/*-combined.vmdk
+            ./wrt/upload/*-combined-efi.img.gz
+            ./wrt/upload/*-combined-efi.vmdk
+            ./wrt/upload/*-image.iso
+            ./wrt/upload/*-image-efi.iso
           body: |
             ${{ env.WRT_MODEL }} 定制固件 · 基于 ImmortalWrt
 

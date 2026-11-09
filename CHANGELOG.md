@@ -1,5 +1,37 @@
 # 更新日志
 
+## [2026-11-10] 过滤 CI 非固件文件，Release 只保留完整固件
+
+### 背景
+
+`Package Firmware` 旧逻辑是「先全搬、再删小的」黑名单：`bin/targets` 里的文件
+被兜底命令无差别搬进 `upload/`，再用 `find ./upload/ -iname "*.bin" -size -2M -delete`
+按体积删小 bin，最后 `files: ./wrt/upload/*.*` 把带点的文件全部发布。
+
+8 个 Release 共 42 个资产里，24 个不是可直接刷写的完整固件；且「小 = 非固件」
+双向不可靠 —— 大体积引导辅助 bin 会漏网，小体积合法固件又会被误删。
+
+### 改动
+
+- 按 `IMG_SLUG` 白名单（`sysupgrade` / `factory` / `combined` / `combined-efi` /
+  `image` / `image-efi`）精确挑选，非白名单文件留在 `bin/targets` 随 `make clean` 回收；
+- 删除 `.config` 拷贝、兜底无差别搬运与 `<2MB` 体积过滤；
+- 新增发布前自检：`upload/` 非空且每个文件命中固件文件名白名单，否则 `exit 1`；
+- `softprops/action-gh-release` 的 `files` 改为显式白名单 glob，作为第二道闸门；
+- `WRT_KVER` / `WRT_LIST` 仍在删除 manifest 前写入 `GITHUB_ENV`，Release 描述不受影响；
+- 落地页移除 `Config` 类展示与内置兜底数据里的旧 Config 链接。
+
+### 生效范围
+
+现有 8 个 Release 的 24 个非固件资产已通过 API 删除，保留 18 个完整固件。
+删除后旧下载直链立即失效；`firmware_pattern` 锚定的 `*-sysupgrade.bin` /
+`*-combined-efi.img.gz` 未受影响，设备端 OTA 无需改动。
+
+> 上一版（统一产物命名）条目中列出的 `*.manifest` / `*.config.txt` 命名示例
+> 自此不再产出，仅作为历史记录保留。
+
+---
+
 ## [2026-11-10] 统一 Release 产物命名：机型-模组插件-编译日期
 
 ### 背景

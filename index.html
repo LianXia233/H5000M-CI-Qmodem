@@ -2411,13 +2411,6 @@
             name: "x86-64-generic-image-efi.iso",
             size: 98500000,
             download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10/x86-64-generic-image-efi-immortalwrt-master-wifi-yes-26.10.18-06.52.10.iso"
-          },
-          {
-            format: "Config",
-            title: "编译内核与软件包选项目录",
-            name: "Config-X86-qmodem-next.txt",
-            size: 351200,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10/Config-X86-qmodem-next-immortalwrt-master-26.10.18-06.52.10.txt"
           }
         ]
       },
@@ -2454,13 +2447,6 @@
             name: "x86-64-generic-image-efi.iso",
             size: 98100000,
             download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-immortalwrt-master-26.10.18-06.53.33/x86-64-generic-image-efi-immortalwrt-master-wifi-yes-26.10.18-06.53.33.iso"
-          },
-          {
-            format: "Config",
-            title: "编译内核与软件包选项目录",
-            name: "Config-X86-qmodem.txt",
-            size: 349800,
-            download_url: "https://github.com/LianXia233/H5000M-CI-Qmodem/releases/download/X86-qmodem-immortalwrt-master-26.10.18-06.53.33/Config-X86-qmodem-immortalwrt-master-26.10.18-06.53.33.txt"
           }
         ]
       }
@@ -2732,8 +2718,6 @@
                   extras.push({ format: 'ISO', title: '物理机 U盘/光盘直刷镜像', name: a.name, size: a.size, download_url: a.browser_download_url });
                 } else if (a.name.includes('combined') && a.name.endsWith('.img.gz')) {
                   extras.push({ format: 'BIOS', title: '传统 Legacy BIOS 启动镜像', name: a.name, size: a.size, download_url: a.browser_download_url });
-                } else if (a.name.endsWith('.txt')) {
-                  extras.push({ format: 'Config', title: '编译内核与软件包选项目录', name: a.name, size: a.size, download_url: a.browser_download_url });
                 }
               });
               if (!primary && rel.assets && rel.assets.length > 0) {
