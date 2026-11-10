@@ -82,11 +82,15 @@ jobs:
         # 只有约 100 kB/s：Range 命中 CDN 边缘缓存后，峰值不能代表可持续吞吐。
         # 现改为多候选 + --speed-limit（持续低于 300 kB/s 即中止）选源，
         # 具体实现与阈值见 .github/scripts/select-apt-mirror.sh。
-        timeout-minutes: 8
+        #
+        # 预算：4 候选 × 2 分片 × 15 s ≈ 2 分钟，之后两次 apt update 各 240 s，
+        # 最坏合计约 10 分钟，故给 15 分钟。原来 8 分钟的预算里，探测吃掉
+        # 2~3 分钟后，第二次 update 只剩二十来秒，重试形同虚设。
+        timeout-minutes: 15
         run: |
           sudo bash "$GITHUB_WORKSPACE/.github/scripts/select-apt-mirror.sh"
           # 换源后必须重新取索引，否则后续 apt install 仍按旧源解析。
-          timeout 300 sudo -E apt -yqq update || timeout 300 sudo -E apt -yqq update
+          timeout 240 sudo -E apt -yqq update || timeout 240 sudo -E apt -yqq update
 
       - name: Initialization Environment
         env:
@@ -110,11 +114,11 @@ jobs:
           Acquire::https::Timeout "20";
           Acquire::Retries "3";
           Acquire::http::Pipeline-Depth "0";
-          # apt 默认按 host 串行，同 host 只走一条连接；退化链路上单连接
-          # 只有几十~一百 kB/s，661 MB 依赖必然拖完预算。access 模式允许
-          # 对同一 host 并发取包，是这一步骤里最有效的单点提速。
-          Acquire::Queue-Mode "access";
-          Acquire::http::Max-Connections "8";
+          # 这里不再设 Queue-Mode / Max-Connections：apt 的 http 方法按
+          # URI 类型排队，access 模式也只保证「每类 URI 一条连接」，并不
+          # 产生同 host 的并行下载，Max-Connections 亦非 http 方法文档化
+          # 选项（见 apt.conf(5)、apt-transport-http(1)）。留着只会误导。
+          # 661 MB 依赖的单流耗时，靠「选快源 + 放宽预算 + 重试时重新换源」兜。
           DPkg::Lock::Timeout "120";
           EOF
           timeout 300 sudo -E apt -yqq purge firefox
