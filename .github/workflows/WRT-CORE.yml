@@ -75,47 +75,18 @@ jobs:
       - name: Select Apt Mirror
         # azure.archive.ubuntu.com 会间歇性退化到几十 kB/s 且不报错，而内置
         # /etc/apt/apt-mirrors.txt 只在「镜像出错」时降级 —— 慢而不失败永远不触发它。
-        # 2026-11-06 的 Initialization Environment 失败即此形态：661 MB 依赖实测
-        # 50 kB/s，单个 8.5 MB 包走掉 3 分钟，任何预算都兜不住。
-        timeout-minutes: 5
+        # 2026-11-06 与 2026-11-10 的 Initialization Environment 失败都是此形态。
+        #
+        # 原探测用 8 MB Range 的平均 speed_download 二选一，2026-11-10 实测
+        # azure=383233953 / archive=199029，据此「保持默认」，但真实 bulk .deb
+        # 只有约 100 kB/s：Range 命中 CDN 边缘缓存后，峰值不能代表可持续吞吐。
+        # 现改为多候选 + --speed-limit（持续低于 300 kB/s 即中止）选源，
+        # 具体实现与阈值见 .github/scripts/select-apt-mirror.sh。
+        timeout-minutes: 8
         run: |
-          # 测速必须带真实体积：约 1.8 MB 的小文件测的是连接建立，不是持续吞吐。
-          # 同批 CI 里 1.76 MB 探测的实测输出是 azure=45627172 / archive=1045578 ——
-          # 把退化镜像判成快 44 倍，而几分钟后同一个 azure 下 bulk .deb 只有约 50 kB/s。
-          # 小文件探测不只是测不出退化，它会主动把慢镜像选进来。
-          # 这里改用 universe 的 Packages.xz（15.0 MB，apt 自己就要下载），配合 Range
-          # 只取前 8 MB：50 kB/s 时 8 MB 要 160 秒，必然超过 --max-time 而现形。
-          probe() {
-            local sp
-            sp=$(curl -sSL -r 0-8388607 -o /dev/null --connect-timeout 10 --max-time 25 \
-              -w '%{speed_download}' "$1" 2>/dev/null || true)
-            echo "${sp:-0}" | cut -d. -f1
-          }
-          # 代号取自 runner 镜像：runner 升级后若目标 404，两边都测到 0，判定退回
-          # 「保持默认」，属安全降级而非误切换。
-          . /etc/os-release 2>/dev/null || true
-          IDX="dists/${VERSION_CODENAME:-noble}/universe/binary-amd64/Packages.xz"
-          AZ=$(probe "http://azure.archive.ubuntu.com/ubuntu/${IDX}")
-          ALT=$(probe "https://archive.ubuntu.com/ubuntu/${IDX}")
-          AZ=${AZ:-0}
-          ALT=${ALT:-0}
-          echo "apt bulk throughput (bytes/s): azure=${AZ} archive=${ALT}"
-
-          # 仅在 azure 确实慢、且官方 archive 明显更快时切换，避免改坏正常环境。
-          if [ "$AZ" -lt 300000 ] && [ "$ALT" -ge $((AZ * 2)) ] && [ "$ALT" -ge 300000 ]; then
-            echo "azure below 300 kB/s and archive clearly faster: prefer archive.ubuntu.com"
-            printf '%s\t%s\n' \
-              'https://archive.ubuntu.com/ubuntu/' 'priority:1' \
-              'https://security.ubuntu.com/ubuntu/' 'priority:2' \
-              'http://azure.archive.ubuntu.com/ubuntu/' 'priority:3' \
-              | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-            # mirrorlist 只覆盖走 apt-mirrors.txt 的条目，硬编码 azure 的 sources 一并替换。
-            sudo sed -i \
-              's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
-              /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
-          else
-            echo "keeping the runner default mirror"
-          fi
+          sudo bash "$GITHUB_WORKSPACE/.github/scripts/select-apt-mirror.sh"
+          # 换源后必须重新取索引，否则后续 apt install 仍按旧源解析。
+          timeout 300 sudo -E apt -yqq update || timeout 300 sudo -E apt -yqq update
 
       - name: Initialization Environment
         env:
@@ -139,6 +110,11 @@ jobs:
           Acquire::https::Timeout "20";
           Acquire::Retries "3";
           Acquire::http::Pipeline-Depth "0";
+          # apt 默认按 host 串行，同 host 只走一条连接；退化链路上单连接
+          # 只有几十~一百 kB/s，661 MB 依赖必然拖完预算。access 模式允许
+          # 对同一 host 并发取包，是这一步骤里最有效的单点提速。
+          Acquire::Queue-Mode "access";
+          Acquire::http::Max-Connections "8";
           DPkg::Lock::Timeout "120";
           EOF
           timeout 300 sudo -E apt -yqq purge firefox
@@ -152,15 +128,22 @@ jobs:
           # 对 OpenWrt 编译没有收益，属于纯耗时项
           sudo -E apt -yqq autoclean
           sudo -E apt -yqq clean
-          timeout 420 sudo -E apt -yqq install dos2unix libfuse-dev ccache
+          timeout 600 sudo -E apt -yqq install dos2unix libfuse-dev ccache
           # 先落盘再执行：curl 卡住时 `<(...)` 会给 bash 喂空脚本，步骤反而"成功"，
           # 延迟到后续步骤才炸；落盘后能立刻校验内容并对下载本身设超时。
           timeout 90 curl -fsSL --retry 3 --max-time 60 \
             -o /tmp/init_build_environment.sh \
             https://build-scripts.immortalwrt.org/init_build_environment.sh
           wc -c /tmp/init_build_environment.sh
-          # 上游脚本要下 661 MB 依赖包，正常 3~5 分钟；20 分钟上限足够，
-          # 一旦网络卡死就带非零码退出（历史最长把 job 挂到 3.5 小时）。
+          # 空脚本或错误页会让随后的 for 循环白跑两轮，先在这里挡住。
+          [ "$(stat -c%s /tmp/init_build_environment.sh)" -gt 2000 ] || {
+            echo "::error::init_build_environment.sh looks truncated"
+            exit 1
+          }
+          # 上游脚本要下 661 MB 依赖包，正常 3~5 分钟。单次上限取 30 分钟：
+          # 2026-11-10 的两次 20 分钟尝试都死在 texlive-lang-greek(79.2 MB)、
+          # mupdf-tools(49.3 MB) 这种大包上，属于预算不足而非无限卡死；
+          # 真正的网络僵死仍由 apt 的 Acquire::http::Timeout 兜底。
           # 超时后重试一次：apt 已下载的 .deb 留在 /var/cache/apt/archives，
           # 第二次只补缺的部分，等于断点续传，不是从头再来。
           # `sudo timeout` 的顺序不能颠倒：timeout 必须是 sudo 的子进程，才和 apt
@@ -168,7 +151,16 @@ jobs:
           # 只杀死 sudo，apt 成孤儿继续持有 dpkg 锁，后续每次 apt 都卡在锁上。
           INIT_OK=0
           for i in 1 2; do
-            if sudo timeout --kill-after=30 1200 bash /tmp/init_build_environment.sh; then
+            if [ "$i" -gt 1 ]; then
+              # 链路退化是实时的：第一次选中的源十分钟后可能已经不可用，
+              # 重试必须重新实测换源，而不是原路重走一遍。
+              sudo bash "$GITHUB_WORKSPACE/.github/scripts/select-apt-mirror.sh" || true
+              # 上一轮被 timeout 杀掉时 dpkg 可能停在半配置态，
+              # 不先修好会让第二次尝试直接卡在 dpkg 上。
+              sudo dpkg --configure -a || true
+              timeout 300 sudo -E apt -yqq update || true
+            fi
+            if sudo timeout --kill-after=30 1800 bash /tmp/init_build_environment.sh; then
               INIT_OK=1
               break
             fi
