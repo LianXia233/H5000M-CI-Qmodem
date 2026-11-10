@@ -31,14 +31,23 @@ CANDIDATES=(
   "https://mirrors.edge.kernel.org/ubuntu/"
 )
 
-# 单个 Range 分片的吞吐（字节/秒）。失败或非数字一律 0。
+# 单个 Range 分片的吞吐（字节/秒）。失败、非 2xx 或非数字一律 0。
+# curl 默认不把 4xx/5xx 当失败，404/503 的错误页同样能被"飞速"传完，
+# 若只看 speed_download，一个掉队或出错的镜像会被排成最快，
+# 然后写进全部 apt 源，紧接着的 apt update 直接失败。
 fetch_speed() {
-  local url="$1" range="$2" sp
-  sp=$(curl -sSL -r "$range" -o /dev/null \
-        --connect-timeout 8 --max-time 20 \
+  local url="$1" range="$2" out code sp
+  out=$(curl -sSL -r "$range" -o /dev/null \
+        --connect-timeout 8 --max-time 15 \
         --speed-limit 300000 --speed-time 8 \
-        -w '%{speed_download}' "${url}${IDX}" 2>/dev/null) || true
+        -w '%{http_code} %{speed_download}' "${url}${IDX}" 2>/dev/null) || true
+  code="${out%% *}"
+  sp="${out##* }"
   sp="${sp%%.*}"
+  case "$code" in
+    200|206) ;;
+    *) sp=0 ;;
+  esac
   case "$sp" in ''|*[!0-9]*) sp=0 ;; esac
   printf '%s' "$sp"
 }
