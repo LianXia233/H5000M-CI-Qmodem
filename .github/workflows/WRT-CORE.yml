@@ -70,7 +70,7 @@ jobs:
     timeout-minutes: 345
     steps:
       - name: Checkout Projects
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Select Apt Mirror
         # azure.archive.ubuntu.com 会间歇性退化到几十 kB/s 且不报错，而内置
@@ -329,7 +329,7 @@ jobs:
       - name: Check Caches (Toolchain & ccache)
         id: check-cache
         if: env.WRT_TEST != 'true'
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           # 保存改由作业末尾的 actions/cache/save 步骤完成（always()，前面步骤失败也保存）：
           # 工具链（含最耗时的 rust/host）在头 1~2 小时就编好了，
@@ -347,7 +347,7 @@ jobs:
       - name: Check Caches (Download)
         id: check-cache-dl
         if: env.WRT_TEST != 'true'
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           # 保存同样由末尾的 actions/cache/save 步骤完成，编译失败也保留已下载的源码包
           # 下载的源码包与机型无关，按「源码 + 分支」单独缓存，避免多机型各存一份
@@ -905,7 +905,7 @@ jobs:
       # key 复用 restore 解析出的主键，确保与恢复时的键完全一致。
       - name: Save Caches (Toolchain & ccache)
         if: always() && env.WRT_TEST != 'true' && steps.check-cache.outputs.cache-primary-key != '' && steps.check-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           key: ${{ steps.check-cache.outputs.cache-primary-key }}
           path: |
@@ -915,7 +915,7 @@ jobs:
 
       - name: Save Caches (Download)
         if: always() && env.WRT_TEST != 'true' && steps.check-cache-dl.outputs.cache-primary-key != '' && steps.check-cache-dl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           key: ${{ steps.check-cache-dl.outputs.cache-primary-key }}
           path: |
