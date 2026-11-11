@@ -1,5 +1,18 @@
 # 更新日志
 
+## [2026-11-12] CI：GitHub Actions 统一升级至 Node 24 运行时
+
+### 背景
+
+`actions/checkout@v4` 一类引用仍声明 `node20`。GitHub 已于 2026-09-23 从托管 runner 移除 Node 20 运行时，仍声明 `node20` 的 action 会被强制跑在 Node 24 上并打印 `Node.js 20 is deprecated` 告警，属于未验证状态；本次按各 action 的 `action.yml` 逐一核对 `runs.using` 后统一升级。
+
+### 改动
+
+- `.github/workflows/Auto-Clean.yml`、`Cache-Clean.yml`、`WRT-CORE.yml` 共 7 处 `uses:` 升级：
+  `actions/checkout@v5` → `v7`、`actions/cache/restore@v5` / `cache/save@v5` → `v6`。
+- **仅改 CI 配置**：项目源码、`node-version` / `python-version` / `go-version` 等工具链版本、产物命名与 Release 流程均未改动。告警指的是 action 自身声明的运行时，不是项目构建所用的 Node 版本。
+- 升级后全仓复扫 59 个工作流/Action 文件：`node20` / `node16` / `node12` 引用残留为 0，所有 YAML 均可解析。
+
 ## [2026-11-10] 优化 luci-app-online-upgrade 适配与落地页资产识别
 
 ### 背景
