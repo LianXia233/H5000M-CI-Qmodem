@@ -19,7 +19,7 @@ set -uo pipefail
 
 CODENAME="$(
   . /etc/os-release 2>/dev/null || true
-  printf '%s' "${VERSION_CODENAME:-noble}"
+  printf '%s' "${VERSION_CODENAME:-resolute}"
 )"
 IDX="dists/${CODENAME}/universe/binary-amd64/Packages.xz"
 

@@ -64,11 +64,11 @@ env:
 jobs:
   core:
     name: ${{inputs.WRT_SOURCE}}
-    # 固定 24.04（noble）：2026-10-19 起 ubuntu-latest 迁移到 Ubuntu 26.04，
-    # 而上游 init_build_environment.sh 只识别到 noble（26.04 的 resolute 直接
-    # 报 "Unsupported OS" 并以 1 退出，全部构建在初始化阶段失败）。
-    # 固定到上游明确支持的版本，避免 latest 再次漂移导致整批 CI 变红。
-    runs-on: ubuntu-24.04
+    # 统一使用 Ubuntu 26.04（ubuntu-latest 自 2026-10-19 起滚动迁移到 26.04，
+    # 显式写 ubuntu-26.04 可避免迁移期内落到 24.04 造成行为不一致）。
+    # 上游 init_build_environment.sh 只识别到 noble，已在初始化步骤注入兼容补丁，
+    # 把脚本内代号映射为 noble 以复用已验证的工具链参数。
+    runs-on: ubuntu-26.04
     # 略低于平台 6h 硬上限：触发硬上限会直接杀掉 runner，
     # 缓存的 post 保存步骤会被整段跳过（见 AP3000M-qmodem 被取消的那次运行）
     timeout-minutes: 345
@@ -148,6 +148,9 @@ jobs:
             echo "::error::init_build_environment.sh looks truncated"
             exit 1
           }
+          # 上游 check_system() 的代号白名单只到 noble，26.04 会直接 exit 1；
+          # 注入兼容补丁，把脚本内代号映射为已验证的 noble 参数集（补丁幂等）。
+          python3 "$GITHUB_WORKSPACE/.github/scripts/patch-init-env.py"
           # 上游脚本要下 661 MB 依赖包，正常 3~5 分钟。单次上限取 30 分钟：
           # 2026-11-10 的两次 20 分钟尝试都死在 texlive-lang-greek(79.2 MB)、
           # mupdf-tools(49.3 MB) 这种大包上，属于预算不足而非无限卡死；
