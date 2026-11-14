@@ -1,5 +1,36 @@
 # 更新日志
 
+## [2026-11-14] CI：固定 runner 为 Ubuntu 24.04，修复 ubuntu-latest 迁移至 26.04 后的构建失败
+
+### 背景
+
+2026-11-14 的 `MTK-AUTO`（run 43538890288）与 `OWRT-ALL`（run 43538890447）
+全部 8 个矩阵作业都在 `Initialization Environment` 阶段失败。日志显示：
+
+```text
+[INFO] Checking system info...
+[ERROR] Unsupported OS, use Ubuntu 20.04 instead.
+```
+
+`ubuntu-latest` 自 2026-10-19 起迁移到 Ubuntu 26.04，而上游
+`init_build_environment.sh` 的 `check_system()` 只识别到 `noble`（24.04），
+遇到 26.04 的 codename 直接 `exit 1`。两次重试均在同一处失败，构建无法进入
+源码克隆与编译阶段。
+
+### 改动
+
+- `.github/workflows/` 4 处 `runs-on: ubuntu-latest` → `ubuntu-24.04`：
+  `WRT-CORE.yml`（编译核心）、`WRT-BUILD.yml`（resolve）、
+  `Auto-Clean.yml`、`Cache-Clean.yml`。
+- 固定到上游脚本明确支持的 noble，避免 `ubuntu-latest` 后续再次漂移；
+  后续上游支持新版本时再同步调整。
+- `README.md` 工作流矩阵补充固定 runner 版本的说明。
+
+### 生效范围
+
+仅调整 CI 运行环境，源码、配置、产物命名与 Release 流程均未改动；
+缓存键不含 runner 版本，已有工具链与下载缓存仍可复用。
+
 ## [2026-11-12] CI：GitHub Actions 统一升级至 Node 24 运行时
 
 ### 背景

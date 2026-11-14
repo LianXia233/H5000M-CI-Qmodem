@@ -19,7 +19,8 @@ permissions: write-all
 
 jobs:
   auto_clean:
-    runs-on: ubuntu-latest
+    # 固定 Ubuntu 24.04，避免 ubuntu-latest 迁移到 26.04 后行为漂移
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Config (device names for keep-latest)
         uses: actions/checkout@v7

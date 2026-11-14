@@ -64,7 +64,11 @@ env:
 jobs:
   core:
     name: ${{inputs.WRT_SOURCE}}
-    runs-on: ubuntu-latest
+    # 固定 24.04（noble）：2026-10-19 起 ubuntu-latest 迁移到 Ubuntu 26.04，
+    # 而上游 init_build_environment.sh 只识别到 noble（26.04 的 resolute 直接
+    # 报 "Unsupported OS" 并以 1 退出，全部构建在初始化阶段失败）。
+    # 固定到上游明确支持的版本，避免 latest 再次漂移导致整批 CI 变红。
+    runs-on: ubuntu-24.04
     # 略低于平台 6h 硬上限：触发硬上限会直接杀掉 runner，
     # 缓存的 post 保存步骤会被整段跳过（见 AP3000M-qmodem 被取消的那次运行）
     timeout-minutes: 345
