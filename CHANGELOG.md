@@ -1,4 +1,40 @@
 # 更新日志
+## [2026-11-15] 修复官方源 firewall4 源码升级导致 Compile Firmware 全红
+
+### 背景
+
+今天（11-15）定时批次中 `OWRT-ALL#143` 与 `MTK-AUTO#164` 共 6 个基于
+`immortalwrt/immortalwrt:master` 的作业在「Compile Firmware」跑 50~60 分钟后失败，
+Checks 注解一致指向：
+
+```text
+make[3]: *** [Makefile:60: build_dir/.../firewall4-2026.11.08~3722eadc/.prepared_*] Error 1
+make[2]: *** [package/Makefile:255: package/network/config/firewall4/compile] Error 1
+```
+
+官方源 11-14 03:42 UTC 合并 `a4ba8240d`（Merge Official Source）把 firewall4 源码包
+从 `2026-10-29~e6f600c4` 升级到 `2026-11-08~3722eadc`，但随源码带的
+`001-firewall4-add-support-for-fullcone-nat.patch` 未同步刷新：新版
+`root/etc/config/firewall` 删掉了两行注释，而补丁第一个 hunk 是纯新增，prepare
+阶段 `Hunk #1 FAILED at 5`。两个 `VIKINGYFY/immortalwrt:owrt` 的 modem-pro 作业
+正常，印证是官方源独有的漂移。11-14 手动批次全绿是因为跑在合并之前。
+
+### 改动
+
+- 新增 `Scripts/patches/firewall4/001-firewall4-add-support-for-fullcone-nat.patch`：
+  以 `diff -u` 重新生成首个 hunk 的上下文（其余 hunk 与上游当前补丁逐字一致），
+  增删内容一字未改；对 `firewall4-2026.11.08~3722eadc` 的 `patch --dry-run` 与
+  实际应用均通过，fullcone 四个选项仍落在 `config defaults` 段内。
+- `.github/workflows/WRT-CORE.yml`：`Update Feeds` 步骤末尾加入带版本守卫的覆盖逻辑，
+  仅当 `WRT_SOURCE=immortalwrt/immortalwrt` 且 `PKG_SOURCE_VERSION` 命中
+  `3722eadc…` 时替换同名补丁；上游再升级即自动让位（吸取 10-31 固定旧快照反向
+  破坏的教训）。
+
+### 兼容性
+
+- 只影响官方源且源码版本命中时；fork 源（modem-pro）与其余机型行为不变。
+- 未改动编译参数、缓存策略与产物命名；下一次上游刷新补丁后本 workaround 自动失效。
+
 
 ## [2026-11-14] CI：全面适配 Ubuntu 26.04 runner
 
