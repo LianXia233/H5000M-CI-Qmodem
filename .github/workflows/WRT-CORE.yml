@@ -504,9 +504,19 @@ jobs:
           # 固件版本标记必须在编译前落盘：插件靠它拿到强依据，
           # 内容与本次 WRT_DATE_DOT（YY.MM.DD）一致，随固件刷新。
           FW_MARKER=./files/etc/online-upgrade/firmware-version
-          if [ ! -f "$FW_MARKER" ] || [ "$(cat "$FW_MARKER")" != "$WRT_DATE_DOT" ]; then
-            echo "::error::$FW_MARKER 缺失或与编译日期 $WRT_DATE_DOT 不一致"
-            cat "$FW_MARKER" 2>/dev/null || true
+          if [ ! -f "$FW_MARKER" ]; then
+            echo "::error::$FW_MARKER 缺失"
+            exit 1
+          fi
+          for KEY in DEVICE ARCH BUILD_TIME BUILD_SEQ VERSION; do
+            grep -qE "^${KEY}='[^']+'$" "$FW_MARKER" || {
+              echo "::error::$FW_MARKER 缺少字段 $KEY：$(cat "$FW_MARKER")"
+              exit 1
+            }
+          done
+          if ! grep -qFx "VERSION='${WRT_DATE_DOT}'" "$FW_MARKER"; then
+            echo "::error::$FW_MARKER 的 VERSION 与编译日期 $WRT_DATE_DOT 不一致"
+            cat "$FW_MARKER"
             exit 1
           fi
 

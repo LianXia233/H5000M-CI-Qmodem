@@ -146,10 +146,18 @@ fi
 
 # ---- 固件版本标记：自动注入 /etc/online-upgrade/firmware-version ----
 # luci-app-online-upgrade 读取它作为本机固件版本的强依据（basis_score 85 起），
-# 避免只用构建时间/过期锚点推断而显示「判定依据较弱」。内容 YY.MM.DD 与
-# Release tag、资产名同源；每天构建自动更新，即「自动升版」，无需人工改版本号。
-# 三仓库变量名不统一：本仓库/H5000M 导出 WRT_DATE_DOT，OpenWRT-CI 导出 WRT_DATE_SHORT。
-# 这里逐个尝试并校验 YY.MM.DD 形状，都缺失时按 UTC+8 现算兜底。
+# 避免只用构建时间/过期锚点推断而显示「判定依据较弱」。
+# 结构化格式（shell key=value，字段名稳定；与 /etc/os-release 风格一致）：
+#   DEVICE='H5000M'                       机型
+#   ARCH='aarch64'                        目标架构
+#   BUILD_TIME='2026-11-17T01:35:20+08:00' 完整编译时间（秒 + 时区）
+#   BUILD_SEQ='3'                         当天第几次编译（见下）
+#   VERSION='26.11.17'                    版本（与 tag/资产同源）
+# 插件只从 VERSION 字段取版本，其余字段进判定依据展示，不改变版本比较。
+# 兼容：字段缺失时插件逐级降级（缺 VERSION 才回退整段文本当纯版本号）。
+#
+# 版本：三仓库变量名不统一（本仓库/H5000M 用 WRT_DATE_DOT，OpenWRT-CI 用
+# WRT_DATE_SHORT），逐个尝试并校验 YY.MM.DD 形状，都缺失时 UTC+8 现算兜底。
 FW_VERSION=""
 for cand in "${WRT_DATE_DOT:-}" "${WRT_DATE_SHORT:-}" "$(TZ=UTC-8 date +'%y.%m.%d')"; do
 	case "$cand" in
@@ -157,18 +165,43 @@ for cand in "${WRT_DATE_DOT:-}" "${WRT_DATE_SHORT:-}" "$(TZ=UTC-8 date +'%y.%m.%
 	esac
 done
 if [ -z "$FW_VERSION" ]; then
-	echo "::error::无法生成固件版本标记（期望 YY.MM.DD），停止构建"
+	echo "::error::无法生成固件版本标记 VERSION（期望 YY.MM.DD），停止构建"
 	exit 1
 fi
+
+# 机型 / 架构：由本 workflow 的构建变量提供；缺失时按已知约定回退。
+FW_DEVICE="${WRT_CONFIG:-unknown}"
+FW_ARCH="${WRT_ARCH:-aarch64}"
+
+# 完整编译时间：精确到秒，显式标注 UTC+8（Asia/Shanghai）时区。
+if FW_BUILD_TIME="$(TZ=UTC-8 date +'%Y-%m-%dT%H:%M:%S+08:00' 2>/dev/null)" && [ -n "$FW_BUILD_TIME" ]; then
+	:
+else
+	FW_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%S+00:00')"
+fi
+
+# 当天第几次编译：用 GitHub run_id（全局唯一、单调，重跑不变 → 可重复，
+# 不同 run 不撞号）；本地手跑回退 UTC+8 秒级时间戳。详见 OpenWRT-CI 同段说明。
+FW_BUILD_SEQ="seq-${GITHUB_RUN_ID:-$(TZ=UTC-8 date +'%Y%m%d%H%M%S' 2>/dev/null || date -u +'%Y%m%d%H%M%S')}"
+
 FW_MARKER_DIR="./files/etc/online-upgrade"
 FW_MARKER="$FW_MARKER_DIR/firmware-version"
 mkdir -p "$FW_MARKER_DIR"
-printf '%s\n' "$FW_VERSION" > "$FW_MARKER"
-# 自检：标记文件必须存在且内容恰为版本号，否则红掉而不是带坏标记编译。
-[ "$(cat "$FW_MARKER")" = "$FW_VERSION" ] || {
-	echo "::error::${FW_MARKER} 写入失败或内容不符（期望 ${FW_VERSION}）"
+{
+	printf "DEVICE='%s'\n" "$FW_DEVICE"
+	printf "ARCH='%s'\n" "$FW_ARCH"
+	printf "BUILD_TIME='%s'\n" "$FW_BUILD_TIME"
+	printf "BUILD_SEQ='%s'\n" "$FW_BUILD_SEQ"
+	printf "VERSION='%s'\n" "$FW_VERSION"
+} > "$FW_MARKER"
+grep -qF "VERSION='${FW_VERSION}'" "$FW_MARKER" || {
+	echo "::error::${FW_MARKER} 的 VERSION 写入失败（期望 ${FW_VERSION}）"
 	exit 1
 }
+if grep -qE "^[A-Z_]+='[^']*$" "$FW_MARKER"; then
+	echo "::error::${FW_MARKER} 存在未闭合的字段值"
+	exit 1
+fi
 
 echo "==> 在线升级预设：机型=${WRT_CONFIG} tag规则=${TAG_RULE} 资产正则=${PATTERN}"
-echo "==> 固件版本标记：${FW_MARKER} = ${FW_VERSION}"
+echo "==> 固件版本标记：${FW_MARKER} DEVICE=${FW_DEVICE} ARCH=${FW_ARCH} BUILD_TIME=${FW_BUILD_TIME} BUILD_SEQ=${FW_BUILD_SEQ} VERSION=${FW_VERSION}"

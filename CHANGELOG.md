@@ -1,4 +1,12 @@
 # 更新日志
+## [2026-11-17] 固件版本标记扩展为结构化多字段
+
+### 改动
+
+- `Scripts/OnlineUpgradePreset.sh`：`firmware-version` 从单行版本号升级为 shell key=value 五字段——`DEVICE`（机型）/`ARCH`（架构）/`BUILD_TIME`（ISO8601 秒+时区）/`BUILD_SEQ`（`seq-<run_id>`，全局唯一、重跑不变、并发不冲突）/`VERSION`（版本）。字段缺失时按约定回退、不阻断；VERSION 缺失则现算 YY.MM.DD。写入后自检字段闭合。
+- `.github/workflows/WRT-CORE.yml`：编译前校验五个字段齐全且 VERSION 等于本次编译日期。
+- 插件 2.6.13 只从 VERSION 取版本，其余字段进判定依据展示，完全兼容旧单行格式。
+
 ## [2026-11-17] CI 自动注入固件版本标记，消除在线升级「判定依据较弱」
 
 ### 改动
