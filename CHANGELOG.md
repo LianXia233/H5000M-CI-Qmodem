@@ -1,4 +1,13 @@
 # 更新日志
+## [2026-11-17] CI 自动注入固件版本标记，消除在线升级「判定依据较弱」
+
+### 改动
+
+- `Scripts/OnlineUpgradePreset.sh`：构建期自动写 `./files/etc/online-upgrade/firmware-version`，内容为本次编译日期 `WRT_DATE_DOT`（`YY.MM.DD`，与 tag/资产同源），随固件刷新、每天自动升版；写入后自检内容一致。
+- `Scripts/Settings.sh`：调用 preset 增加 `|| exit 1`，注入失败即阻断构建。
+- `.github/workflows/WRT-CORE.yml`：编译前校验标记文件存在且内容等于 `WRT_DATE_DOT`，否则红掉。
+- 根因：此前只生成 UCI 预设、从未写固件版本标记，插件只能靠构建时间/过期锚点推断，恒显「判定依据较弱」。
+
 ## [2026-11-17] 三仓库统一在线升级规则：独立 tag_rule + 统一产物命名
 
 ### 改动

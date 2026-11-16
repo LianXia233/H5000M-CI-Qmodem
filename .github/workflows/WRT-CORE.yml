@@ -501,6 +501,15 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/Settings.sh
 
+          # 固件版本标记必须在编译前落盘：插件靠它拿到强依据，
+          # 内容与本次 WRT_DATE_DOT（YY.MM.DD）一致，随固件刷新。
+          FW_MARKER=./files/etc/online-upgrade/firmware-version
+          if [ ! -f "$FW_MARKER" ] || [ "$(cat "$FW_MARKER")" != "$WRT_DATE_DOT" ]; then
+            echo "::error::$FW_MARKER 缺失或与编译日期 $WRT_DATE_DOT 不一致"
+            cat "$FW_MARKER" 2>/dev/null || true
+            exit 1
+          fi
+
           # 保存合并后、defconfig 前的完整请求配置，供下一步逐符号核对
           # 是否有 qmodem / 前端 / 驱动 / 插件符号被 Kconfig 静默丢弃。
           cp .config .config.requested

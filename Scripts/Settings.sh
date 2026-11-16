@@ -104,7 +104,7 @@ echo "wifi defaults injected: 2G=${WIFI_2G_HTMODE} 5G=${WIFI_5G_HTMODE} country=
 # CONFIG_PACKAGE_luci-app-online-upgrade=y，脚本据此决定是否生成
 # ./files/etc/config/online-upgrade（覆盖包自带的 conffile）。
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-bash "$SCRIPT_DIR/OnlineUpgradePreset.sh"
+bash "$SCRIPT_DIR/OnlineUpgradePreset.sh" || exit 1
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
 #修改默认IP地址
