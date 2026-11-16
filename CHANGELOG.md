@@ -1,4 +1,11 @@
 # 更新日志
+## [2026-11-17] 三仓库统一在线升级规则：独立 tag_rule + 统一产物命名
+
+### 改动
+
+- `Scripts/OnlineUpgradePreset.sh`：`tag=latest` + 独立 `tag_rule=^<WRT_CONFIG>-<INFO>-<BRANCH>-`；产物正则改为 `<WRT_CONFIG>-<架构>-<YY.MM.DD>-<类型>`，兼容新旧日期格式；自检键数 10 → 11。
+- `.github/workflows/WRT-CORE.yml`：新增 `WRT_ARCH`（X86 → x86-64，其余 → aarch64）与点分日期 `WRT_DATE_DOT`；打包统一为 `<WRT_CONFIG>-<架构>-<YY.MM.DD>-<类型>.<ext>`，并加架构段自检。
+
 ## [2026-11-15] 修复官方源 firewall4 源码升级导致 Compile Firmware 全红
 
 ### 背景

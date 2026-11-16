@@ -51,20 +51,19 @@ if [ -z "$WRT_CONFIG" ] || [ -z "$WRT_INFO" ]; then
 fi
 
 # ===== 资产名规则 =====
-# 与 WRT-CORE「Package Firmware」保持一致：资产名统一为
-#   <WRT_CONFIG>-<YYYYMMDD>[-<镜像类型>].<扩展名>
-# WRT_CONFIG 即 "<机型>-<模组插件>"（如 H5000M-qmodem-next），正则直接锚定
-# 配置名即可天然隔离同机型三套变体，不再需要从 .config 的 TARGET_DEVICE
-# 反推平台前缀（旧规则无法区分变体，且换源码分支就要跟着改）。
-# 日期用 [0-9]+ 而非写死 8 位，便于兼容过渡期混合命名的 Release。
+# v2.7 三仓库统一命名：<WRT_CONFIG>-<架构>-<YY.MM.DD>-<类型>.<扩展名>
+# WRT_CONFIG 即 "<机型>-<模组插件>"（如 H5000M-qmodem-next），正则锚定它即可
+# 隔离同机型三套变体。日期用点分 [0-9.]+ 兼容新旧过渡（旧格式为 8 位紧凑），
+# 架构段用 (aarch64|x86-64) 精确声明，供升级插件 compat 判定。
+WRT_ARCH="${WRT_ARCH:-aarch64}"
 case "$WRT_CONFIG" in
 	X86-*)
 		# 默认取 UEFI 镜像：现代小主机/软路由主流引导方式；BIOS/Legacy 机器
 		# 需把 combined-efi 改成 combined —— 两种镜像分区表不同，不能混用。
-		PATTERN="^${WRT_CONFIG}-[0-9]+-combined-efi\\.img\\.gz\$"
+		PATTERN="^${WRT_CONFIG}-${WRT_ARCH}-[0-9.]+-combined-efi\\.img\\.gz\$"
 		;;
 	*)
-		PATTERN="^${WRT_CONFIG}-[0-9]+-sysupgrade\\.bin\$"
+		PATTERN="^${WRT_CONFIG}-${WRT_ARCH}-[0-9.]+-sysupgrade\\.bin\$"
 		;;
 esac
 
@@ -77,13 +76,16 @@ esac
 #   - 追加 <WRT_INFO>-（源码 owner）后两者不再互相误匹配；
 #   - 再追加 <WRT_BRANCH>- 可防止同一 owner 换分支编译时跨分支取最新。
 # 分支名可能含点（如 openwrt-24.10），正则里 . 是通配符，需转义成 \. 。
+# v2.7 统一规则：TAG 追踪模式与过滤正则解耦（与另两个 CI 仓库一致）。
+#   tag      = latest
+#   tag_rule = ^<WRT_CONFIG>-<WRT_INFO>-<BRANCH>-
 BRANCH_RE="${WRT_BRANCH//./\\.}"
 if [ -n "$BRANCH_RE" ]; then
-	TAG="latest@^${WRT_CONFIG}-${WRT_INFO}-${BRANCH_RE}-"
+	TAG_RULE="^${WRT_CONFIG}-${WRT_INFO}-${BRANCH_RE}-"
 else
-	# 非 CI 手动调用、未提供分支时退回两段锚定，仍不会跨变体误匹配
-	TAG="latest@^${WRT_CONFIG}-${WRT_INFO}-"
+	TAG_RULE="^${WRT_CONFIG}-${WRT_INFO}-"
 fi
+TAG='latest'
 
 mkdir -p "$(dirname "$TARGET")"
 {
@@ -91,6 +93,7 @@ mkdir -p "$(dirname "$TARGET")"
 	printf "config online-upgrade 'settings'\n"
 	printf "\toption repo '%s'\n" "$UPGRADE_REPO"
 	printf "\toption tag '%s'\n" "$TAG"
+	printf "\toption tag_rule '%s'\n" "$TAG_RULE"
 	printf "\toption firmware_pattern '%s'\n" "$PATTERN"
 	printf "\toption min_size_mb '15'\n"
 	printf "\toption proxy 'https://gh.acg2.mom/'\n"
@@ -101,9 +104,8 @@ mkdir -p "$(dirname "$TARGET")"
 	printf "\toption dl_retries '3'\n"
 } > "$TARGET"
 
-# 生成后自检：10 个键一个不少，且关键项与推导值一致。
-# 任何一项不匹配都说明模板被改坏，直接红掉而不是带着坏预设编译。
-EXPECT_KEYS=10
+# 生成后自检：11 个键一个不少，且关键项与推导值一致。
+EXPECT_KEYS=11
 GOT_KEYS=$(grep -c '^[[:space:]]*option ' "$TARGET" || true)
 if [ "$GOT_KEYS" -ne "$EXPECT_KEYS" ]; then
 	echo "::error::${TARGET} 生成异常：期望 ${EXPECT_KEYS} 个 option，实际 ${GOT_KEYS}"
@@ -111,6 +113,10 @@ if [ "$GOT_KEYS" -ne "$EXPECT_KEYS" ]; then
 fi
 grep -qF "option tag '${TAG}'" "$TARGET" || {
 	echo "::error::${TARGET} 的 tag 与推导值不一致"
+	exit 1
+}
+grep -qF "option tag_rule '${TAG_RULE}'" "$TARGET" || {
+	echo "::error::${TARGET} 的 tag_rule 与推导值不一致"
 	exit 1
 }
 grep -qF "option firmware_pattern '${PATTERN}'" "$TARGET" || {
@@ -125,17 +131,17 @@ grep -qF "option repo '${UPGRADE_REPO}'" "$TARGET" || {
 # 正则自检：构造示例产物名 / 示例标签，确认两条规则真能命中，
 # 避免上游 Regex::new 编译失败或锚点写错导致设备端 OTA 找不到固件。
 case "$WRT_CONFIG" in
-	X86-*) SAMPLE="${WRT_CONFIG}-20261109-combined-efi.img.gz" ;;
-	*)     SAMPLE="${WRT_CONFIG}-20261109-sysupgrade.bin" ;;
+	X86-*) SAMPLE="${WRT_CONFIG}-${WRT_ARCH}-26.11.09-combined-efi.img.gz" ;;
+	*)     SAMPLE="${WRT_CONFIG}-${WRT_ARCH}-26.11.09-sysupgrade.bin" ;;
 esac
 if [[ ! "$SAMPLE" =~ $PATTERN ]]; then
 	echo "::error::firmware_pattern 未匹配示例产物 ${SAMPLE}（规则=${PATTERN}）"
 	exit 1
 fi
 SAMPLE_TAG="${WRT_CONFIG}-${WRT_INFO}-${WRT_BRANCH:-master}-26.11.09-08.31.52"
-if [[ ! "$SAMPLE_TAG" =~ ${TAG#latest@} ]]; then
-	echo "::error::tag 正则未匹配示例标签 ${SAMPLE_TAG}（规则=${TAG}）"
+if [[ ! "$SAMPLE_TAG" =~ $TAG_RULE ]]; then
+	echo "::error::tag_rule 正则未匹配示例标签 ${SAMPLE_TAG}（规则=${TAG_RULE}）"
 	exit 1
 fi
 
-echo "==> 在线升级预设：机型=${WRT_CONFIG} tag正则=${TAG} 资产正则=${PATTERN}"
+echo "==> 在线升级预设：机型=${WRT_CONFIG} tag规则=${TAG_RULE} 资产正则=${PATTERN}"

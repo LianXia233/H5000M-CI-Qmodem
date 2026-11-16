@@ -220,6 +220,15 @@ jobs:
           WRT_NOW="$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S:%Y%m%d")"
           echo "WRT_DATE=${WRT_NOW%%:*}" >> $GITHUB_ENV
           echo "WRT_DATE_SHORT=${WRT_NOW##*:}" >> $GITHUB_ENV
+          # v2.7 三仓库统一：资产名用点分日期 YY.MM.DD（与 Release Tag 同源），
+          # 供 luci-app-online-upgrade 的 version::pick() 识别为日期型版本。
+          echo "WRT_DATE_DOT=$(TZ=UTC-8 date +"%y.%m.%d")" >> $GITHUB_ENV
+          # 架构段：X86 → x86-64，其余 → aarch64（与 OpenWRT-CI 一致）。
+          case "${WRT_CONFIG%%-*}" in
+            X86) WRT_ARCH='x86-64' ;;
+            *)   WRT_ARCH='aarch64' ;;
+          esac
+          echo "WRT_ARCH=$WRT_ARCH" >> $GITHUB_ENV
           echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
           echo "WRT_INFO=${WRT_SOURCE%%/*}" >> $GITHUB_ENV
           echo "WRT_CONFIG_FILE=$CONFIG_FILE" >> $GITHUB_ENV
@@ -842,7 +851,14 @@ jobs:
               # clean 回收，不进 upload。
               case "$IMG_SLUG" in
                 sysupgrade|factory|combined|combined-efi|image|image-efi)
-                  NEW_FILE="$WRT_CONFIG-$WRT_DATE_SHORT-$IMG_SLUG.$EXT"
+                  # v2.7 三仓库统一命名：<机型>-<变体>-<架构>-<YY.MM.DD>-<类型>.<ext>
+                  NEW_FILE="$WRT_CONFIG-$WRT_ARCH-$WRT_DATE_DOT-$IMG_SLUG.$EXT"
+                  # 架构段自检，杜绝声明与产物不一致
+                  FILE_ARCH=$(printf '%s' "$NEW_FILE" | cut -d '-' -f 3)
+                  if [ "$FILE_ARCH" != "$WRT_ARCH" ]; then
+                    echo "::error::产物架构段 [$FILE_ARCH] 与 WRT_ARCH [$WRT_ARCH] 不一致（文件=$NEW_FILE）"
+                    exit 1
+                  fi
                   mv -f "$FILE" ./upload/"$NEW_FILE"
                   echo "[keep]   $(basename "$FILE") -> $NEW_FILE" ;;
                 *)
