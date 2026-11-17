@@ -872,8 +872,12 @@ jobs:
                 sysupgrade|factory|combined|combined-efi|image|image-efi)
                   # v2.7 三仓库统一命名：<机型>-<变体>-<架构>-<YY.MM.DD>-<类型>.<ext>
                   NEW_FILE="$WRT_CONFIG-$WRT_ARCH-$WRT_DATE_DOT-$IMG_SLUG.$EXT"
-                  # 架构段自检，杜绝声明与产物不一致
-                  FILE_ARCH=$(printf '%s' "$NEW_FILE" | cut -d '-' -f 3)
+                  # 架构段自检，杜绝声明与产物不一致。
+                  # 不能用 `cut -d '-' -f 3` 取段：WRT_ARCH 自身可能带连字符
+                  # （x86-64），第 3 段会被截成 x86 而误报。改为按已知前后缀
+                  # 精确剥离：先去掉 "<机型>-<变体>-" 前缀，再截到 "-<日期>-" 之前。
+                  FILE_ARCH="${NEW_FILE#"$WRT_CONFIG"-}"
+                  FILE_ARCH="${FILE_ARCH%%"-"$WRT_DATE_DOT"-"*}"
                   if [ "$FILE_ARCH" != "$WRT_ARCH" ]; then
                     echo "::error::产物架构段 [$FILE_ARCH] 与 WRT_ARCH [$WRT_ARCH] 不一致（文件=$NEW_FILE）"
                     exit 1
