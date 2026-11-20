@@ -6,11 +6,10 @@ name: OWRT-ALL
 
 #CI计划
 on:
-  #自动编译：当Auto-Clean运行完成后
-  workflow_run:
-    workflows: ["Auto-Clean"]
-    types:
-      - completed
+  #每日定时自动编译（05:00 CST）。旧版本 Releases 由 WRT-CORE 在
+  #本次固件发布成功后按分组清理，不再先清空再编译。
+  schedule:
+    - cron: 0 21 * * *
   #手动编译
   workflow_dispatch:
     inputs:
