@@ -1,4 +1,29 @@
 # 更新日志
+
+## [2026-11-21] CI 下载接入 FluxDown：init 脚本改为分段/单连接可回退下载
+
+### 背景
+
+- `init_build_environment.sh` 之前用 curl 单连接下载；上游在境内网络下偶发挂起或返回
+  截断内容，落盘后的字节数校验只能事后兜底。
+
+### 改动
+
+- 新增 `.github/actions/fluxdown-download/action.yml`（FluxDown CLI 0.6.8 composite
+  action，原样落地）：checksum 驱动解析、Range 探测分段、16 段/单连接回退、
+  size + digest 缓存校验、可选解压。
+- `.github/workflows/WRT-CORE.yml`：`init_build_environment.sh` 改由上述 action 下载到
+  `/tmp`；初始化步骤删除 curl 下载分支，只保留文件字节数复核与执行重试。
+- 新增 `.github/scripts/install-rustup.sh`：三处 rustup 安装点统一调用；rustup-init 由
+  FluxDown 分段下载（摘要取自官方 `.sha256` 清单），替代 `curl | sh`。
+- `README.md`：补充 CI 下载策略与 action 目录说明。
+
+### 验证
+
+- FluxDown 0.6.8 在沙箱内完成安装、sha256 校验与实际下载；
+- 工作流 YAML 解析与内嵌 shell `bash -n` 通过；
+- 敏感信息扫描无命中。
+
 ## [2026-11-17] 修复产物架构段自检误判，Package Firmware 全红
 
 ### 背景

@@ -96,6 +96,18 @@ jobs:
           # 换源后必须重新取索引，否则后续 apt install 仍按旧源解析。
           timeout 240 sudo -E apt -yqq update || timeout 240 sudo -E apt -yqq update
 
+      # 上游初始化脚本统一改由 FluxDown 下载（技能要求：CI 下载走 FluxDown，
+      # curl 仅用于探测与安装 CLI）。脚本约 12 KB，单连接即可。
+      - name: 下载 init_build_environment.sh（FluxDown）
+        # 脚本小、失败快；限时避免网络僵死拖到 job 级超时
+        timeout-minutes: 10
+        uses: ./.github/actions/fluxdown-download
+        with:
+          url: https://build-scripts.immortalwrt.org/init_build_environment.sh
+          output: init_build_environment.sh
+          segments: '1'
+          cache-dir: /tmp
+
       - name: Initialization Environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -137,11 +149,8 @@ jobs:
           sudo -E apt -yqq autoclean
           sudo -E apt -yqq clean
           timeout 600 sudo -E apt -yqq install dos2unix libfuse-dev ccache
-          # 先落盘再执行：curl 卡住时 `<(...)` 会给 bash 喂空脚本，步骤反而"成功"，
-          # 延迟到后续步骤才炸；落盘后能立刻校验内容并对下载本身设超时。
-          timeout 90 curl -fsSL --retry 3 --max-time 60 \
-            -o /tmp/init_build_environment.sh \
-            https://build-scripts.immortalwrt.org/init_build_environment.sh
+          # 上游脚本已由上一「FluxDown」步骤落盘（Range 探测 + 单连接回退 +
+          # 尺寸复核）；这里再复核一次字节数。
           wc -c /tmp/init_build_environment.sh
           # 空脚本或错误页会让随后的 for 循环白跑两轮，先在这里挡住。
           [ "$(stat -c%s /tmp/init_build_environment.sh)" -gt 2000 ] || {
@@ -589,10 +598,9 @@ jobs:
             LINKER="$(readlink -f "$LINKER")"
             echo "使用交叉链接器: $LINKER"
 
-            # runner 镜像通常自带 rustup，缺失时最小化安装
+            # runner 镜像通常自带 rustup，缺失时由脚本安装（FluxDown 下载 rustup-init）
             if ! command -v rustup >/dev/null 2>&1; then
-              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --profile minimal --default-toolchain stable
+              bash "$GITHUB_WORKSPACE/.github/scripts/install-rustup.sh"
             fi
             export PATH="$HOME/.cargo/bin:$PATH"
             rustup target add aarch64-unknown-linux-musl
@@ -691,8 +699,7 @@ jobs:
           echo "交叉链接器：$LINKER"
 
           if ! command -v rustup >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-              | sh -s -- -y --profile minimal --default-toolchain stable
+            bash "$GITHUB_WORKSPACE/.github/scripts/install-rustup.sh"
           fi
           export PATH="$HOME/.cargo/bin:$PATH"
           rustup target add "$TRIPLE" >/dev/null
@@ -756,8 +763,7 @@ jobs:
         if: contains(env.WRT_CONFIG, 'modem-pro') && env.WRT_TEST != 'true'
         run: |
           if ! command -v rustup >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-              | sh -s -- -y --profile minimal --default-toolchain stable
+            bash "$GITHUB_WORKSPACE/.github/scripts/install-rustup.sh"
           fi
           export PATH="$HOME/.cargo/bin:$PATH"
           rustup target add aarch64-unknown-linux-musl
