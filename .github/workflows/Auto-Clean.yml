@@ -5,11 +5,17 @@ name: Auto-Clean
 
 on:
   # 自动清理：每天 UTC 21:00（北京时间次日 05:00）
+  # 定时任务只轮换 30 天以前的运行记录；Releases 不再在编译前清空，
+  # 旧版本改由 WRT-CORE 在本次固件成功发布后按配置分组清理。
   schedule:
     - cron: 0 21 * * *
-  # 手动清理
+  # 手动清理（可选是否清理 Releases、是否每个机型保留最新一个）
   workflow_dispatch:
     inputs:
+      clean_releases:
+        description: '清理 Releases（日常旧版本已由编译完成后自动清理，此处仅供手动维护）'
+        type: boolean
+        default: true
       keep_latest_per_device:
         description: '保留每个机型最新一个 Release（不勾选则清除 Releases 中的全部文件）'
         type: boolean
@@ -23,11 +29,13 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Checkout Config (device names for keep-latest)
+        if: github.event_name == 'workflow_dispatch' && inputs.clean_releases
         uses: actions/checkout@v7
         with:
           sparse-checkout: Config
 
       - name: Clear Releases (delete all files / keep latest optional)
+        if: github.event_name == 'workflow_dispatch' && inputs.clean_releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
