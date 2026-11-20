@@ -1,0 +1,252 @@
+name: fluxdown-download
+description: >-
+  Download a large file with FluxDown CLI (--local): checksum-driven URL
+  resolution, Range-aware segmentation, single-connection fallback, and
+  size+digest validated caching.
+author: Yuanbao
+
+branding:
+  icon: download-cloud
+  color: blue
+
+inputs:
+  url:
+    description: Direct download URL. Omit when using base-url + sha256sums-url.
+    required: false
+    default: ''
+  base-url:
+    description: Directory base used to build <base-url>/<file> when url is omitted.
+    required: false
+    default: ''
+  sha256sums-url:
+    description: >-
+      Checksum manifest URL. Treated as the authoritative source for BOTH the
+      file name and the digest; avoids fragile HTML index parsing.
+    required: false
+    default: ''
+  file-glob:
+    description: ERE used to pick the target file out of sha256sums (or the HTML index fallback).
+    required: false
+    default: ''
+  output:
+    description: Output file name. Derived from sha256sums / URL when omitted.
+    required: false
+    default: ''
+  checksum:
+    description: Expected digest, either 'sha256=<hex>' or a bare hex string (assumed sha256).
+    required: false
+    default: ''
+  segments:
+    description: Segment count; '.' lets FluxDown decide. Default 16, auto-downgraded if Range is unsupported.
+    required: false
+    default: '16'
+  cache-dir:
+    description: Absolute cache directory. Defaults to $RUNNER_TEMP/fluxdown-cache.
+    required: false
+    default: ''
+  cache-key:
+    description: When set, enables actions/cache on cache-dir. Bump it when the download logic changes.
+    required: false
+    default: ''
+  fluxdown-version:
+    description: FluxDown CLI release version, without the leading v.
+    required: false
+    default: '0.6.8'
+  user-agent:
+    description: Optional custom User-Agent (-U), useful for mirrors that gate on UA.
+    required: false
+    default: ''
+  extract:
+    description: When true, extracts tar.zst / tar.gz / tgz / zip into extract-to.
+    required: false
+    default: 'false'
+  extract-to:
+    description: Extraction destination directory.
+    required: false
+    default: 'sdk'
+  strip-components:
+    description: Leading path components stripped when extracting tar archives.
+    required: false
+    default: '1'
+
+outputs:
+  file:
+    description: Absolute path of the downloaded file.
+    value: ${{ steps.dl.outputs.file }}
+  size:
+    description: File size in bytes.
+    value: ${{ steps.dl.outputs.size }}
+  sha256:
+    description: Actual SHA256 of the downloaded file.
+    value: ${{ steps.dl.outputs.sha256 }}
+  segments-used:
+    description: Segment count FluxDown actually used.
+    value: ${{ steps.dl.outputs.segments-used }}
+
+runs:
+  using: composite
+  steps:
+    # Keep every input behind env: never interpolate ${{ inputs.* }} straight
+    # into a shell script (injection + quoting hazards).
+    - name: Install FluxDown CLI (checksum verified)
+      shell: bash
+      env:
+        INPUT_FLUXDOWN_VERSION: ${{ inputs.fluxdown-version }}
+      run: |
+        set -euo pipefail
+        version="$INPUT_FLUXDOWN_VERSION"
+        cache="$RUNNER_TEMP/fluxdown-cli-$version"
+        if [ -x "$cache/fluxdown" ]; then
+          echo "FluxDown CLI $version already installed"
+        else
+          mkdir -p "$cache"
+          base="https://github.com/zerx-lab/FluxDown/releases/download/v${version}"
+          pkg="FluxDown-CLI-${version}-linux-x64.tar.gz"
+          curl -fsSL --retry 4 --retry-all-errors -o "$RUNNER_TEMP/fd.tgz" "$base/$pkg"
+          curl -fsSL --retry 4 --retry-all-errors -o "$RUNNER_TEMP/fd.sums" "$base/SHA256SUMS-cli.txt"
+          want=$(awk -v f="$pkg" '$2==f{print $1}' "$RUNNER_TEMP/fd.sums")
+          test -n "$want" || { echo "no checksum for $pkg"; exit 1; }
+          echo "$want  $RUNNER_TEMP/fd.tgz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/fd.tgz" -C "$cache" --strip-components=1
+        fi
+        echo "$cache" >> "$GITHUB_PATH"
+        "$cache/fluxdown" --version
+
+    - name: Restore download cache
+      if: inputs.cache-key != ''
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.cache-dir || format('{0}/fluxdown-cache', runner.temp) }}
+        key: ${{ inputs.cache-key }}
+
+    - name: Download with FluxDown CLI
+      id: dl
+      shell: bash
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_SHA256SUMS_URL: ${{ inputs.sha256sums-url }}
+        INPUT_FILE_GLOB: ${{ inputs.file-glob }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_CHECKSUM: ${{ inputs.checksum }}
+        INPUT_SEGMENTS: ${{ inputs.segments }}
+        INPUT_CACHE_DIR: ${{ inputs.cache-dir }}
+        INPUT_USER_AGENT: ${{ inputs.user-agent }}
+        INPUT_EXTRACT: ${{ inputs.extract }}
+        INPUT_EXTRACT_TO: ${{ inputs.extract-to }}
+        INPUT_STRIP_COMPONENTS: ${{ inputs.strip-components }}
+        INPUT_FLUXDOWN_VERSION: ${{ inputs.fluxdown-version }}
+      run: |
+        set -euo pipefail
+        fd="$RUNNER_TEMP/fluxdown-cli-$INPUT_FLUXDOWN_VERSION/fluxdown"
+        cache_dir="${INPUT_CACHE_DIR:-$RUNNER_TEMP/fluxdown-cache}"
+        mkdir -p "$cache_dir"
+
+        # --- 1. Resolve file name: sha256sums > HTML index > url > output ----
+        sums=""
+        if [ -n "$INPUT_SHA256SUMS_URL" ]; then
+          sums=$(curl -fsSL --retry 5 --retry-all-errors --max-time 120 "$INPUT_SHA256SUMS_URL" || true)
+        fi
+        file=""
+        if [ -n "$sums" ] && [ -n "$INPUT_FILE_GLOB" ]; then
+          file=$(printf '%s\n' "$sums" \
+                 | awk '{ n=$2; sub(/^\*/,"",n); sub(/^.*\//,"",n);
+                          if (n ~ ENVIRON["INPUT_FILE_GLOB"]) { print n; exit } }' || true)
+        fi
+        if [ -z "$file" ] && [ -n "$INPUT_BASE_URL" ] && [ -n "$INPUT_FILE_GLOB" ]; then
+          listing=$(curl -fsSL --retry 5 --retry-all-errors --max-time 120 "$INPUT_BASE_URL/" || true)
+          file=$(printf '%s\n' "$listing" \
+                 | grep -oE 'href="[^"]+"' | sed -e 's/href="//' -e 's/"$//' \
+                 | sed -e 's#^\./##' -e 's#^.*/##' \
+                 | grep -E "$INPUT_FILE_GLOB" | sort -u | head -n1 || true)
+        fi
+        if [ -z "$file" ]; then
+          file="${INPUT_OUTPUT:-${INPUT_URL##*/}}"
+          file="${file%%\?*}"
+        fi
+        test -n "$file" || { echo "::error::cannot resolve target file name"; exit 1; }
+
+        url="$INPUT_URL"
+        if [ -z "$url" ]; then
+          test -n "$INPUT_BASE_URL" || { echo "::error::provide url or base-url"; exit 1; }
+          url="$INPUT_BASE_URL/$file"
+        fi
+        out="${INPUT_OUTPUT:-$file}"
+        echo "URL : $url"
+        echo "FILE: $out"
+
+        # --- 2. Expected digest (bare hex) -----------------------------------
+        expected="${INPUT_CHECKSUM#*=}"
+        if [ -z "$expected" ] && [ -n "$sums" ]; then
+          expected=$(printf '%s\n' "$sums" \
+                     | awk -v f="$file" '{ n=$2; sub(/^\*/,"",n); sub(/^.*\//,"",n);
+                                          if (n==f) { print $1; exit } }' || true)
+        fi
+        verify() {
+          if [ -n "$expected" ]; then
+            echo "$expected  $cache_dir/$out" | sha256sum -c -
+          else
+            echo "::warning::no checksum for $out; size check only"
+          fi
+        }
+
+        want=$(curl -sIL --retry 3 --max-time 60 "$url" \
+               | tr -d '\r' \
+               | awk 'tolower($1)=="content-length:" && $2+0>1024 {v=$2} END{print v}' || true)
+
+        # --- 3. Cache hit only when size AND digest agree --------------------
+        if [ -s "$cache_dir/$out" ] \
+           && { [ -z "$want" ] || [ "$(stat -c%s "$cache_dir/$out")" = "$want" ]; } \
+           && verify >/dev/null 2>&1; then
+          echo "cache hit: $(du -h "$cache_dir/$out" | cut -f1)"
+          used=0
+        else
+          rm -f "$cache_dir/$out"
+          seg="${INPUT_SEGMENTS:-16}"
+          if [ "$seg" != "." ] && [ "$seg" -gt 1 ] 2>/dev/null; then
+            rc=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -r 0-0 "$url" || true)
+            case "$rc" in
+              206|416) ;;
+              *) echo "Range unsupported (HTTP $rc) -> 1 segment"; seg=1 ;;
+            esac
+          fi
+          echo "FluxDown: $seg segment(s)"
+          fd_args=(--local -d "$cache_dir" -o "$out" -s "$seg")
+          [ -z "$expected" ] || fd_args+=(--checksum "sha256=$expected")
+          [ -z "$INPUT_USER_AGENT" ] || fd_args+=(-U "$INPUT_USER_AGENT")
+          if ! "$fd" add "${fd_args[@]}" "$url"; then
+            echo "FluxDown $seg-segment download failed; retrying with 1 segment"
+            rm -f "$cache_dir/$out"
+            fd_args=(--local -d "$cache_dir" -o "$out.retry" -s 1)
+            [ -z "$expected" ] || fd_args+=(--checksum "sha256=$expected")
+            [ -z "$INPUT_USER_AGENT" ] || fd_args+=(-U "$INPUT_USER_AGENT")
+            "$fd" add "${fd_args[@]}" "$url"
+            mv "$cache_dir/$out.retry" "$cache_dir/$out"
+            seg=1
+          fi
+          used="$seg"
+        fi
+
+        # --- 4. Post-download validation -------------------------------------
+        got=$(stat -c%s "$cache_dir/$out")
+        if [ -n "$want" ]; then
+          [ "$got" = "$want" ] || { echo "::error::size mismatch: $got != $want"; exit 1; }
+        fi
+        verify
+        du -h "$cache_dir/$out"
+
+        # --- 5. Optional extraction ------------------------------------------
+        if [ "$INPUT_EXTRACT" = "true" ]; then
+          mkdir -p "$INPUT_EXTRACT_TO"
+          case "$out" in
+            *.tar.zst) tar --zstd -xf "$cache_dir/$out" -C "$INPUT_EXTRACT_TO" --strip-components="$INPUT_STRIP_COMPONENTS" ;;
+            *.tar.gz|*.tgz) tar -xzf "$cache_dir/$out" -C "$INPUT_EXTRACT_TO" --strip-components="$INPUT_STRIP_COMPONENTS" ;;
+            *.zip) unzip -q -o "$cache_dir/$out" -d "$INPUT_EXTRACT_TO" ;;
+            *) echo "::error::unknown archive type: $out"; exit 1 ;;
+          esac
+        fi
+
+        echo "file=$cache_dir/$out" >> "$GITHUB_OUTPUT"
+        echo "size=$got" >> "$GITHUB_OUTPUT"
+        echo "sha256=$(sha256sum "$cache_dir/$out" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+        echo "segments-used=$used" >> "$GITHUB_OUTPUT"
