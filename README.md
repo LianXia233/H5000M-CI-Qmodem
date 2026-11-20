@@ -237,6 +237,10 @@ Rust 后端用**官方 Rust SDK**（rustup stable + `aarch64-unknown-linux-musl`
 | **`Auto-Clean.yml`** | 每日定时 05:00 (CST) / 手动 | 定时仅轮换 30 天以前的 Actions 日志；手动触发可清理 Releases（可选每个机型保留最新一个） |
 | **`Cache-Clean.yml`** | 每周定时 / 手动 | 回收 Actions 编译缓存，避免依赖冲突 |
 
+> **CI 下载策略**：构建期的文件下载统一走 `.github/actions/fluxdown-download`（FluxDown CLI：
+> Range 探测分段、不支持时降为单连接、失败自动重试并校验尺寸/摘要）；`curl` 仅用于探测
+> （HEAD / Range / 清单）与安装 FluxDown CLI 本身。
+
 > 所有作业统一运行在 `ubuntu-26.04`。`ubuntu-latest` 自 2026-10-19 起滚动迁移到
 > Ubuntu 26.04（迁移期内仍可能落到 24.04），因此显式锁定标签。上游
 > `init_build_environment.sh` 仅识别到 `noble`，初始化步骤会注入兼容补丁把脚本内
@@ -264,6 +268,7 @@ H5000M-CI-Qmodem/
 │   ├── OWRT-ALL.yml            # X86 架构定时自动发版
 │   ├── Auto-Clean.yml          # 日志轮换与手动 Release 清理
 │   └── Cache-Clean.yml         # 构建缓存回收
+├── .github/actions/fluxdown-download/action.yml  # FluxDown 大文件下载 composite action
 ├── AP3000M-EEPROM/             # AP3000M 射频恢复专属资产与脚本
 ├── Config/                     # 模块化 Kconfig 配置文件片段
 │   ├── OWRT-DEFAULT.txt        # 集中化出厂默认网络与无线参数
