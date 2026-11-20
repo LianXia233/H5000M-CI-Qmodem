@@ -232,9 +232,9 @@ Rust 后端用**官方 Rust SDK**（rustup stable + `aarch64-unknown-linux-musl`
 | 工作流文件 | 调度策略 | 核心职责 |
 | :--- | :--- | :--- |
 | **`WRT-BUILD.yml`** | 手动 `workflow_dispatch` | 自定义按需编译：自选机型与方案（`-qmodem-next` / `-qmodem` / `-modem-pro`），支持 `TEST=true` 快速语法校验 |
-| **`MTK-AUTO.yml`** | 每日定时 / 联动触发 | 自动构建并并行发布 MTK 机型（H5000M / AP3000M）的全部三版本固件 |
-| **`OWRT-ALL.yml`** | 每日定时 / 联动触发 | 自动构建并并行发布 X86 平台的双版本固件 |
-| **`Auto-Clean.yml`** | 每日定时 05:00 (CST) | 轮换保留最新一份 Release，自动清理过期 Tag 与 30 天以前的 Actions 日志 |
+| **`MTK-AUTO.yml`** | 每日定时 05:00 (CST) / 手动 | 自动构建并并行发布 MTK 机型（H5000M / AP3000M）的全部三版本固件 |
+| **`OWRT-ALL.yml`** | 每日定时 05:00 (CST) / 手动 | 自动构建并并行发布 X86 平台的双版本固件 |
+| **`Auto-Clean.yml`** | 每日定时 05:00 (CST) / 手动 | 定时仅轮换 30 天以前的 Actions 日志；手动触发可清理 Releases（可选每个机型保留最新一个） |
 | **`Cache-Clean.yml`** | 每周定时 / 手动 | 回收 Actions 编译缓存，避免依赖冲突 |
 
 > **CI 下载策略**：构建期的文件下载统一走 `.github/actions/fluxdown-download`（FluxDown CLI：
@@ -266,7 +266,7 @@ H5000M-CI-Qmodem/
 │   ├── WRT-BUILD.yml           # 手动触发定制编译
 │   ├── MTK-AUTO.yml            # MTK 架构定时自动发版
 │   ├── OWRT-ALL.yml            # X86 架构定时自动发版
-│   ├── Auto-Clean.yml          # 历史制品与日志轮换清理
+│   ├── Auto-Clean.yml          # 日志轮换与手动 Release 清理
 │   └── Cache-Clean.yml         # 构建缓存回收
 ├── .github/actions/fluxdown-download/action.yml  # FluxDown 大文件下载 composite action
 ├── AP3000M-EEPROM/             # AP3000M 射频恢复专属资产与脚本

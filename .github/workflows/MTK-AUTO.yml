@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 定时自动编译：Auto-Clean 清理完成后自动构建设备固件
+# 定时自动编译：每日定时自动构建设备固件（发布成功后再清理旧 Releases）
 name: MTK-AUTO
 
 on:
-  # Auto-Clean 完成后自动触发
-  workflow_run:
-    workflows: ["Auto-Clean"]
-    types:
-      - completed
+  # 每日定时自动编译（05:00 CST）。旧版本 Releases 由 WRT-CORE 在
+  # 本次固件发布成功后按分组清理，不再先清空再编译。
+  schedule:
+    - cron: 0 21 * * *
   # 也可手动触发
   workflow_dispatch:
     inputs:
